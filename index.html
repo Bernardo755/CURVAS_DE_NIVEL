@@ -31,6 +31,7 @@ small{color:var(--mu)}.tb{display:flex;flex-wrap:wrap;gap:8px;align-items:center
 #map2{display:none;height:560px;margin-top:6px}.leaflet-tooltip.tl{background:rgba(0,0,0,.78);color:#fff;border:0;font:600 11px sans-serif;padding:2px 6px;box-shadow:none}.leaflet-tooltip.tl:before{display:none}.tabs{display:flex;gap:6px;margin:6px 0 12px}.tabs button{margin:0;background:transparent;color:var(--fg);border:1px solid var(--bd)}.tabs button.on{background:var(--ac);color:#fff;outline:none}table input,.c table td{font-size:12px}</style><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"><script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script></head><body><div class="w">
 <h1>🌲 Curvas de nivel y flujo de agua</h1>
 <p class="sub">Para planear reforestación: siembra siguiendo las curvas y ubica zanjas/barreras donde se concentra el agua.</p>
+<div id="err" style="display:none;background:#c0392b;color:#fff;padding:8px 12px;border-radius:8px;margin:8px 0;font-size:13px"></div>
 <div class="tabs"><button id="t1" class="on" onclick="showTab(1)">1) Curvas y franjas</button><button id="t2" onclick="showTab(2)">2) Presas y jagüeyes</button></div>
 <div id="m1">
 <div class="c" style="margin-bottom:14px">
@@ -100,9 +101,15 @@ small{color:var(--mu)}.tb{display:flex;flex-wrap:wrap;gap:8px;align-items:center
 </div></div>
 </div>
 <script>
+window.addEventListener('error',e=>{const b=document.getElementById('err');if(b){b.style.display='block';b.textContent='Error en la página: '+e.message+(e.lineno?' (línea '+e.lineno+')':'')}});
 const $=id=>document.getElementById(id);
 const EXB="0,0\n400,0\n420,200\n350,320\n150,300\n0,220";
 const EXP="0,0,1520\n200,0,1505\n400,0,1495\n420,200,1530\n350,320,1565\n150,300,1550\n0,220,1535\n200,150,1510\n100,100,1515\n300,100,1500\n250,250,1545\n80,230,1540";
+function showTab(t){
+ $('m1').style.display=t===1?'block':'none';$('m2').style.display=t===2?'block':'none';
+ $('t1').classList.toggle('on',t===1);$('t2').classList.toggle('on',t===2);window.scrollTo(0,0);
+ if(t===1){setTimeout(()=>{try{M.invalidateSize();if(M2)M2.invalidateSize()}catch(e){}},60);return}
+ try{if(typeof open2!=='function')throw new Error('el módulo 2 no se cargó');open2()}catch(e){$('m2m').textContent='Error en el módulo 2: '+e.message;console.error(e)}}
 function ex(){TGT=null;$('sys').value='m';$('b').value=EXB;$('p').value=EXP;draw()}
 function parse(t){return t.split(/\n/).map(l=>l.trim().split(/[\s,;\t]+/).map(Number)).filter(a=>a.length>=2&&a.every(v=>!isNaN(v)))}
 function pip(x,y,B){let c=false;for(let i=0,j=B.length-1;i<B.length;j=i++){const a=B[i],b=B[j];if((a[1]>y)!==(b[1]>y)&&x<(b[0]-a[0])*(y-a[1])/(b[1]-a[1])+a[0])c=!c}return c}
@@ -394,8 +401,6 @@ let ST2=[],SEL2=0,mode2='sel',NID=0,PN=0,JN=0,EV=[{d:2,mm:45,h:3},{d:6,mm:70,h:2
 const COL=['#1565d8','#e53935','#43a047','#8e24aa','#fb8c00','#00897b','#6d4c41','#d81b60'],fm=v=>Math.round(v).toLocaleString('es-MX'),f1=v=>v.toFixed(1);
 const cellOf=(x,y)=>{const i=Math.round((x-G.minX)/G.cs),j=Math.round((y-G.minY)/G.cs);return i<0||j<0||i>=G.nx||j>=G.ny?-1:j*G.nx+i};
 const wx=k=>G.minX+(k%G.nx)*G.cs,wy=k=>G.minY+Math.floor(k/G.nx)*G.cs,X2=x=>G.pad+(x-G.minX)*G.s,Y2=y=>G.hc-G.pad-(y-G.minY)*G.s;
-function showTab(t){$('m1').style.display=t===1?'':'none';$('m2').style.display=t===2?'':'none';$('t1').classList.toggle('on',t===1);$('t2').classList.toggle('on',t===2);
- if(t===1){setTimeout(()=>{try{M.invalidateSize();if(M2)M2.invalidateSize()}catch(e){}},60)}else open2()}
 function open2(){
  if(!G){$('m2m').textContent='Primero genera el análisis del Módulo 1 (pulsa “Dibujar” o “Obtener alturas y dibujar”). Aquí se usa su flujo de agua.';return}
  $('m2m').textContent='';renderEv();setM2(mode2);calcAll();renderProps();run2()}
@@ -481,9 +486,9 @@ function chart2(S){const c=$('cv3'),x=c.getContext('2d');c.width=900;c.height=24
  $('lg').innerHTML=ST2.map((o,i)=>`<span style="color:${COL[i%8]}">■ ${o.name}</span>`).join(' &nbsp;')+' · línea punteada = capacidad · barras azules = lluvia diaria (altura relativa)'}
 function renderProps(){const o=ST2.find(u=>u.id===SEL2),el=$('sp2');
  if(!o){el.innerHTML='';return}
- const f=(k,lab,st)=>`<div><label>${lab}</label><input type="number" value="${o.p[k]}" step="${st}" min="0.1" onchange="upd(${o.id},'${k}',this.value)"></div>`;
+ const f=(k,lab,st)=>`<div><label>${lab}</label><input type="number" value="${o.p[k]}" step="${st}" min="0.1" onchange="updS(${o.id},'${k}',this.value)"></div>`;
  el.innerHTML=`<div style="border:1px solid var(--bd);border-radius:8px;padding:8px"><b style="color:${COL[ST2.indexOf(o)%8]}">${o.name}</b> — ${o.type==='dam'?'Presa / bordo':'Jagüey excavado'}<div class="r">`+(o.type==='dam'?f('Hw','Altura del agua (m)',.25)+f('fb','Bordo libre (m)',.1):f('l','Largo (m)',5)+f('w','Ancho (m)',5))+'</div><div class="r">'+(o.type==='dam'?f('cw','Ancho corona (m)',.5)+f('z','Talud (H:V)',.5):f('d','Profundidad (m)',.5)+f('z','Talud (H:V)',.5))+`</div><button class="s" onclick="delS(${o.id})" style="margin-top:8px">🗑️ Eliminar</button></div>`}
-function upd(id,k,v){const o=ST2.find(u=>u.id===id);if(!o||!(+v>0))return;o.p[k]=+v;calcAll();run2()}
+function updS(id,k,v){const o=ST2.find(u=>u.id===id);if(!o||!(+v>0))return;o.p[k]=+v;calcAll();run2()}
 function delS(id){ST2=ST2.filter(o=>o.id!==id);SEL2=0;renderProps();calcAll();run2()}
 function pos2(e){const c=$('cv2'),r=c.getBoundingClientRect(),f=c.width/r.width;return[G.minX+((e.clientX-r.left)*f-G.pad)/G.s,G.minY+(G.hc-G.pad-(e.clientY-r.top)*f)/G.s]}
 $('cv2').addEventListener('click',e=>{if(!G)return;const[x,y]=pos2(e);$('m2m').textContent='';
