@@ -27,10 +27,8 @@ canvas{max-width:100%;height:auto;border-radius:8px;border:1px solid var(--bd);d
 #st{font-size:13px;color:var(--mu);margin-top:8px}
 #hv{font-size:13px;min-height:20px;margin-top:6px}
 .ms{color:#c0392b;font-size:13px}
-small{color:var(--mu)}.tb{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px}.tb button{margin:0}.tb input{width:80px}button.on{outline:3px solid #f1c40f}
-#map{height:440px;border-radius:8px;border:1px solid var(--bd)}
-.draw-m, .draw-m .leaflet-interactive, .draw-m .leaflet-container { cursor: crosshair !important; }
-</style><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"><script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script></head><body><div class="w">
+small{color:var(--mu)}.tb{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px}.tb button{margin:0}.tb input{width:80px}button.on{outline:3px solid #f1c40f}#map,#map2{height:440px;border-radius:8px;border:1px solid var(--bd)}
+#map2{display:none;height:560px;margin-top:6px}.leaflet-tooltip.tl{background:rgba(0,0,0,.78);color:#fff;border:0;font:600 11px sans-serif;padding:2px 6px;box-shadow:none}.leaflet-tooltip.tl:before{display:none}</style><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"><script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script></head><body><div class="w">
 <h1>🌲 Curvas de nivel y flujo de agua</h1>
 <p class="sub">Para planear reforestación: siembra siguiendo las curvas y ubica zanjas/barreras donde se concentra el agua.</p>
 <div class="c" style="margin-bottom:14px">
@@ -73,10 +71,10 @@ small{color:var(--mu)}.tb{display:flex;flex-wrap:wrap;gap:8px;align-items:center
 <div style="display:flex;align-items:flex-end;gap:6px"><button class="s" id="bt" onclick="pickT()" style="margin:0">📍 Elegir destino</button><button class="s" onclick="TGT=null;draw()" style="margin:0">Quitar</button></div></div>
 <div class="k"><label><input type="checkbox" id="k7">Ver flujo SIN franjas (comparar)</label></div>
 <small id="ti">Tras generar las franjas, haz clic en una (o en la tabla) para ver su detalle. Pulsa “Elegir destino” y haz clic en el mapa donde quieres llevar el agua (represa, zona baja, cárcava).</small></div>
-<div class="r"><button onclick="draw()">Dibujar</button><button class="s" onclick="ex()">Ejemplo</button><button onclick="verEnMapa()" class="s" style="margin-left:8px;border-color:var(--ac);color:var(--ac)">📍 Ver franjas en mapa real</button></div>
+<div class="r"><button onclick="draw()">Dibujar</button><button class="s" onclick="ex()">Ejemplo</button></div>
 <div class="ms" id="ms"></div>
 </div>
-<div class="c"><div class="cv"><canvas id="cv" width="900" height="600"></canvas></div>
+<div class="c"><div class="tb"><button class="s" id="bv" onclick="togView()" style="margin:0 0 8px">🗺️ Ver sobre mapa real</button></div><div class="cv" id="cvw"><canvas id="cv" width="900" height="600"></canvas></div><div id="map2"></div>
 <div id="hv">Pasa el cursor sobre el mapa para ver elevación, pendiente y acumulación de agua.</div>
 <div id="st"></div><div id="sd"></div><div id="sl"></div></div>
 </div></div>
@@ -87,20 +85,17 @@ const EXP="0,0,1520\n200,0,1505\n400,0,1495\n420,200,1530\n350,320,1565\n150,300
 function ex(){TGT=null;$('sys').value='m';$('b').value=EXB;$('p').value=EXP;draw()}
 function parse(t){return t.split(/\n/).map(l=>l.trim().split(/[\s,;\t]+/).map(Number)).filter(a=>a.length>=2&&a.every(v=>!isNaN(v)))}
 function pip(x,y,B){let c=false;for(let i=0,j=B.length-1;i<B.length;j=i++){const a=B[i],b=B[j];if((a[1]>y)!==(b[1]>y)&&x<(b[0]-a[0])*(y-a[1])/(b[1]-a[1])+a[0])c=!c}return c}
-let G=null,TGT=null,pickMode=false,SEL=0;
+let G=null,TGT=null,pickMode=false,SEL=0,fitNext=false;
 function draw(){
  $('ms').textContent='';
  let B=parse($('b').value),P=parse($('p').value).filter(a=>a.length>=3);
  if(B.length<3||P.length<3){$('ms').textContent='Necesito 3+ vértices de contorno y 3+ puntos x,y,z.';return}
- const sys=$('sys').value;
- let inv=(x,y)=>`X ${x.toFixed(1)} · Y ${y.toFixed(1)}`;
- let tf_inv = (x,y) => [x, y];
+ const sys=$('sys').value;let ll=null,inv=(x,y)=>`X ${x.toFixed(1)} · Y ${y.toFixed(1)}`;
  if(sys!=='m'){
   const g=a=>sys==='latlon'?[a[1],a[0]]:[a[0],a[1]];
   const all=[...B,...P].map(g),lo0=all.reduce((s,a)=>s+a[0],0)/all.length,la0=all.reduce((s,a)=>s+a[1],0)/all.length;
   const tf=a=>{const [lo,la]=g(a);return [(lo-lo0)*111320*Math.cos(la0*Math.PI/180),(la-la0)*110540,a[2]]};
-  B=B.map(tf);P=P.map(tf);inv=(x,y)=>(la0+y/110540).toFixed(6)+', '+(lo0+x/(111320*Math.cos(la0*Math.PI/180))).toFixed(6);
-  tf_inv = (x,y) => [la0+y/110540, lo0+x/(111320*Math.cos(la0*Math.PI/180))];
+  B=B.map(tf);P=P.map(tf);ll=(x,y)=>[la0+y/110540,lo0+x/(111320*Math.cos(la0*Math.PI/180))];inv=(x,y)=>(la0+y/110540).toFixed(6)+', '+(lo0+x/(111320*Math.cos(la0*Math.PI/180))).toFixed(6);
  }
  const xs=B.map(a=>a[0]),ys=B.map(a=>a[1]);
  const minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys);
@@ -113,12 +108,15 @@ function draw(){
   for(const p of P){const d=(p[0]-x)**2+(p[1]-y)**2+1e-6,w=1/d;sw+=w;sz+=w*p[2]}
   Z[k]=sz/sw;
  }
+ // suavizado
  for(let it=0;it<3;it++){const T=Z.slice();for(let j=1;j<ny-1;j++)for(let i=1;i<nx-1;i++){let s=0;for(let a=-1;a<=1;a++)for(let b=-1;b<=1;b++)s+=T[(j+a)*nx+i+b];Z[j*nx+i]=s/9}}
  let zmin=1e9,zmax=-1e9;
  for(let k=0;k<n;k++)if(mask[k]){zmin=Math.min(zmin,Z[k]);zmax=Math.max(zmax,Z[k])}
+ // celdas de borde (salidas)
  const bd=new Uint8Array(n),D8=[[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1],[0,-1],[1,-1]];
  const ins=(i,j)=>i>=0&&j>=0&&i<nx&&j<ny&&mask[j*nx+i];
  for(let j=0;j<ny;j++)for(let i=0;i<nx;i++)if(mask[j*nx+i]){for(const[a,b]of D8)if(!ins(i+a,j+b)){bd[j*nx+i]=1;break}}
+ // rellenar depresiones (Planchon-Darboux)
  const W=new Float64Array(n).fill(1e9),eps=0.001;
  for(let k=0;k<n;k++)if(mask[k]&&bd[k])W[k]=Z[k];
  for(let it=0,ch=true;ch&&it<500;it++){ch=false;
@@ -126,6 +124,7 @@ function draw(){
    for(const[a,b]of D8){if(!ins(i+a,j+b))continue;const m=(j+b)*nx+i+a;
     if(Z[k]>=W[m]+eps){W[k]=Z[k];ch=true;break}
     else if(W[k]>W[m]+eps){W[k]=W[m]+eps;ch=true}}}}
+ // direcciones D8 y acumulación
  const dir=new Int32Array(n).fill(-1),acc=new Float64Array(n),slope=new Float64Array(n),order=[];
  for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){const k=j*nx+i;if(!mask[k])continue;acc[k]=1;order.push(k);
   const gx=(Z[j*nx+Math.min(i+1,nx-1)]-Z[j*nx+Math.max(i-1,0)])/(2*cs),gy=(Z[Math.min(j+1,ny-1)*nx+i]-Z[Math.max(j-1,0)*nx+i])/(2*cs);
@@ -187,6 +186,7 @@ function draw(){
   rep+=`<br>Longitud total: <b>${tl.toFixed(0)} m</b> · plantas estimadas (cada ${ps} m): <b>${tp}</b>`;
   rep+='<br><small>Cómo construirlas: cada franja sigue su cota con 0.5–1% de pendiente longitudinal hacia las flechas naranjas (caída = largo × 1%) y descarga en el círculo naranja. Zanja o barrera viva aguas arriba, siembra en el lado bajo.</small>'}
  else if($('k6').checked)rep+='<br><small>Elige el destino para generar las franjas.</small>';
+ // lienzo
  const cv=$('cv'),ctx=cv.getContext('2d'),pad=30,wc=900,s=(wc-2*pad)/Wd,hc=Math.round(Hd*s+2*pad);
  cv.width=wc;cv.height=hc;
  const X=x=>pad+(x-minX)*s,Y=y=>hc-pad-(y-minY)*s;
@@ -199,6 +199,7 @@ function draw(){
   if($('k4').checked){const gx=(Z[j*nx+Math.min(i+1,nx-1)]-Z[j*nx+Math.max(i-1,0)])/(2*cs),gy=(Z[Math.min(j+1,ny-1)*nx+i]-Z[Math.max(j-1,0)*nx+i])/(2*cs);
    const sh=Math.max(.6,Math.min(1.15,(0.5*gx-0.5*gy+0.7)/Math.sqrt(gx*gx+gy*gy+1)/0.7+0.1));c=c.map(v=>Math.min(255,v*sh))}
   ctx.fillStyle=`rgb(${c[0]|0},${c[1]|0},${c[2]|0})`;ctx.fillRect(X(minX+i*cs)-px/2,Y(minY+j*cs)-px/2,px,px)}
+ // curvas de nivel
  const iv=+$('iv').value||5;let nl=0;
  if($('k1').checked){
   const l0=Math.ceil(zmin/iv),l1=Math.floor(zmax/iv);
@@ -230,29 +231,47 @@ function draw(){
   for(const o of SS){let h=o.len/2,t=0,p=o.pts[0];for(let i=1;i<o.pts.length;i++){const d=Math.hypot(o.pts[i][0]-o.pts[i-1][0],o.pts[i][1]-o.pts[i-1][1]);if(t+d>=h){p=o.pts[i];break}t+=d}
    const sel=o.id===SEL;ctx.fillStyle=sel?'#1565d8':'#b34700';ctx.beginPath();ctx.arc(X(p[0]),Y(p[1]),sel?11:9,0,7);ctx.fill();ctx.strokeStyle='#fff';ctx.lineWidth=1.5;ctx.stroke();ctx.fillStyle='#fff';ctx.fillText(o.id,X(p[0]),Y(p[1]))}
   ctx.textAlign='start';ctx.textBaseline='alphabetic'}
+ // cauces
  const th=+$('th').value,C=k=>[X(minX+(k%nx)*cs),Y(minY+Math.floor(k/nx)*cs)];
  if($('k2').checked){ctx.strokeStyle='#1565d8';ctx.lineCap='round';
   for(const k of order){if(dir[k]<0||acc[k]<th)continue;const a=C(k),b=C(dir[k]);ctx.lineWidth=1.2+Math.log2(acc[k]/th+1)*1.1;ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke()}}
+ // flechas
  if($('k3').checked){const st=Math.max(3,Math.round(nx/22));ctx.strokeStyle='rgba(10,60,160,.8)';ctx.fillStyle='rgba(10,60,160,.8)';ctx.lineWidth=1.2;
   for(let j=st>>1;j<ny;j+=st)for(let i=st>>1;i<nx;i+=st){const k=j*nx+i;if(!mask[k]||dir[k]<0)continue;
    const a=C(k),b=C(dir[k]),ang=Math.atan2(b[1]-a[1],b[0]-a[0]),L=9;
    const x1=a[0]-Math.cos(ang)*L/2,y1=a[1]-Math.sin(ang)*L/2,x2=a[0]+Math.cos(ang)*L/2,y2=a[1]+Math.sin(ang)*L/2;
    ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
    ctx.beginPath();ctx.moveTo(x2,y2);ctx.lineTo(x2-Math.cos(ang-.5)*5,y2-Math.sin(ang-.5)*5);ctx.lineTo(x2-Math.cos(ang+.5)*5,y2-Math.sin(ang+.5)*5);ctx.fill()}}
+ // contorno y puntos
  ctx.strokeStyle='#1f4d27';ctx.lineWidth=2.5;ctx.setLineDash([8,4]);ctx.beginPath();B.forEach((a,i)=>i?ctx.lineTo(X(a[0]),Y(a[1])):ctx.moveTo(X(a[0]),Y(a[1])));ctx.closePath();ctx.stroke();ctx.setLineDash([]);
  if($('k5').checked){ctx.font='10px sans-serif';for(const p of P){ctx.fillStyle='#c0392b';ctx.beginPath();ctx.arc(X(p[0]),Y(p[1]),3,0,7);ctx.fill();ctx.fillStyle='#222';ctx.fillText(p[2],X(p[0])+5,Y(p[1])-4)}}
  if(TGT){const tx=X(TGT[0]),ty=Y(TGT[1]),rr=Math.max(+$('rd').value||15,cs*1.5)*s;ctx.setLineDash([5,4]);ctx.strokeStyle='#7b1fa2';ctx.lineWidth=2;ctx.beginPath();ctx.arc(tx,ty,rr,0,7);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='#7b1fa2';ctx.beginPath();ctx.arc(tx,ty,5,0,7);ctx.fill();ctx.font='bold 12px sans-serif';ctx.fillText('Destino',tx+8,ty-8)}
+ // estadísticas
  let ar=0;for(let i=0,j=B.length-1;i<B.length;j=i++)ar+=B[j][0]*B[i][1]-B[i][0]*B[j][1];ar=Math.abs(ar)/2;
  let ss=0,cnt=0,st30=0;for(const k of order){ss+=slope[k];cnt++;if(slope[k]>30)st30++}
  $('st').innerHTML=`Área: <b>${(ar/10000).toFixed(2)} ha</b> · Elevación: <b>${zmin.toFixed(0)}–${zmax.toFixed(0)} m</b> · ${nl} curvas · Pendiente media: <b>${(ss/cnt).toFixed(1)}%</b> · Superficie con pendiente &gt;30%: <b>${(100*st30/cnt).toFixed(0)}%</b><br><small>Tip: planta en hileras sobre las curvas; usa zanjas de infiltración y barreras donde los cauces (azul) concentran el flujo.</small>`;
- $('st').innerHTML+=rep;G={minX,minY,cs,nx,ny,Z,acc,mask,slope,s,pad,hc,SS,B,tf_inv};panel(SS,B);
+ const ST=[];if($('k2').checked)for(const k of order){const d=dir[k];if(d>=0&&acc[k]>=th)ST.push([[minX+(k%nx)*cs,minY+Math.floor(k/nx)*cs],[minX+(d%nx)*cs,minY+Math.floor(d/nx)*cs]])}
+ $('st').innerHTML+=rep;G={minX,minY,cs,nx,ny,Z,acc,mask,slope,s,pad,hc,SS,B,ll,inv,ST};panel(SS,B);if(typeof ovDraw==='function')ovDraw();
 }
 $('cv').addEventListener('mousemove',e=>{if(!G)return;const r=$('cv').getBoundingClientRect(),f=$('cv').width/r.width;
  const px=(e.clientX-r.left)*f,py=(e.clientY-r.top)*f,x=G.minX+(px-G.pad)/G.s,y=G.minY+(G.hc-G.pad-py)/G.s,i=Math.round((x-G.minX)/G.cs),j=Math.round((y-G.minY)/G.cs);
  if(i<0||j<0||i>=G.nx||j>=G.ny||!G.mask[j*G.nx+i]){$('hv').textContent='';return}
  const k=j*G.nx+i;$('hv').innerHTML=`Elevación <b>${G.Z[k].toFixed(1)} m</b> · Pendiente <b>${G.slope[k].toFixed(0)}%</b> · Área aportante <b>${(G.acc[k]*G.cs*G.cs).toFixed(0)} m²</b>`});
 function segD(p,a,b){const dx=b[0]-a[0],dy=b[1]-a[1],t=Math.max(0,Math.min(1,((p[0]-a[0])*dx+(p[1]-a[1])*dy)/(dx*dx+dy*dy||1)));return Math.hypot(p[0]-a[0]-t*dx,p[1]-a[1]-t*dy)}
-function selS(id){SEL=id===SEL?0:id;draw()}
+function contacts(o,B,cs){const out=[],n=B.length;
+ for(let i=0;i<n;i++){const a=B[i],b=B[(i+1)%n],dx=b[0]-a[0],dy=b[1]-a[1],L2=dx*dx+dy*dy||1,Ln=Math.sqrt(L2),hits=[];
+  for(const p of o.pts)if(segD(p,a,b)<1.5*cs)hits.push(Math.max(0,Math.min(1,((p[0]-a[0])*dx+(p[1]-a[1])*dy)/L2)));
+  if(!hits.length)continue;hits.sort((x,y)=>x-y);
+  const gs=[[hits[0]]];for(let q=1;q<hits.length;q++){if((hits[q]-hits[q-1])*Ln>3*cs)gs.push([hits[q]]);else gs[gs.length-1].push(hits[q])}
+  for(const g of gs){const t=g.reduce((u,v)=>u+v,0)/g.length;out.push({i,j:(i+1)%n,pt:[a[0]+t*dx,a[1]+t*dy],dA:t*Ln,dB:(1-t)*Ln})}}
+ return out}
+function ctHTML(o,B){const cts=contacts(o,B,G.cs);
+ if(!cts.length)return '<div style="margin-top:8px"><b>Esquinas:</b> esta franja no toca ningún lado del contorno.</div>';
+ const dc=c=>{let m=1e9;for(let q=0;q<o.pts.length-1;q++)m=Math.min(m,segD(c,o.pts[q],o.pts[q+1]));return m};
+ return '<div style="margin-top:8px"><b>Esquinas de los lados que toca</b><br><small>“Por el lado” = metros medidos sobre el lindero desde la esquina hasta donde la franja lo toca. “En línea recta” = distancia directa de la esquina a la franja.</small></div><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:4px"><tr style="text-align:left;color:var(--mu)"><th>Lado y contacto</th><th>Esquina</th><th>Por el lado</th><th>En línea recta</th></tr>'+
+ cts.map(c=>`<tr style="border-top:1px solid var(--bd)"><td rowspan="2">Lado ${c.i+1} (V${c.i+1}–V${c.j+1})<br><small>${G.inv(c.pt[0],c.pt[1])}</small></td><td>V${c.i+1}</td><td><b>${c.dA.toFixed(0)} m</b></td><td>${dc(B[c.i]).toFixed(0)} m</td></tr><tr><td>V${c.j+1}</td><td><b>${c.dB.toFixed(0)} m</b></td><td>${dc(B[c.j]).toFixed(0)} m</td></tr>`).join('')+'</table></div>'}
+function showMap(){fitNext=true;if(!view2)togView();else ovDraw();if(view2)$('map2').scrollIntoView({behavior:'smooth',block:'center'})}
+function selS(id){SEL=id===SEL?0:id;fitNext=true;draw()}
 function panel(SS,B){const sl=$('sl'),sd=$('sd');
  if(!SS.length){sl.innerHTML='';sd.innerHTML='';return}
  if(!SS.some(o=>o.id===SEL))SEL=0;
@@ -260,88 +279,35 @@ function panel(SS,B){const sl=$('sl'),sd=$('sd');
  const o=SS.find(u=>u.id===SEL);
  if(!o){sd.innerHTML='<small>Haz clic en una franja del mapa (o en la tabla) para ver su detalle.</small>';return}
  const f=v=>v<1.5*G.cs?'≈0 (toca)':v.toFixed(0)+' m',n=B.length;
- 
- let baseHtml = `<div style="border:1px solid var(--bd);border-radius:8px;padding:8px;margin-top:8px;font-size:13px;line-height:1.55"><b>Franja F${o.id}</b> · cota ${o.L.toFixed(1)} m · largo <b>${o.len.toFixed(0)} m</b> · ancho ${$('sw').value} m<br>
+ sd.innerHTML=`<div style="border:1px solid var(--bd);border-radius:8px;padding:8px;margin-top:8px;font-size:13px;line-height:1.55"><b>Franja F${o.id}</b> · cota ${o.L.toFixed(1)} m · largo <b>${o.len.toFixed(0)} m</b> · ancho ${$('sw').value} m<br>
 Inicio (○): ${o.cS}<br>Salida (◯): ${o.cO} · rumbo <b>${o.dir}</b> (${o.az.toFixed(0)}°)<br>
 Caída recomendada (0.5–1%): <b>${(o.len*0.005).toFixed(2)}–${(o.len*0.01).toFixed(2)} m</b> → cota de salida ≈ ${(o.L-o.len*0.01).toFixed(2)} m<br>
 Salida → destino: <b>${o.dT.toFixed(0)} m</b> · Área que le drena: <b>${(o.area/10000).toFixed(2)} ha</b> · Plantas: <b>${o.plants}</b> (cada ${$('ps').value} m)<br>
-Separación media a la franja de arriba: <b>${o.up==null?'—':o.up.toFixed(0)+' m'}</b> · a la de abajo: <b>${o.dn==null?'—':o.dn.toFixed(0)+' m'}</b>`;
-
- let ladosHtml = '<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:8px"><tr style="text-align:left;color:var(--mu)"><th>Intersección</th><th>Lado</th><th>Distancia a Esquina A</th><th>Distancia a Esquina B</th></tr>';
- const distP = (p1, p2) => Math.hypot(p1[0]-p2[0], p1[1]-p2[1]);
- 
- let bestS = -1, minS = 1e9, bestO = -1, minO = 1e9;
- for(let i=0; i<n; i++){
-     if(o.dS[i] < minS){ minS = o.dS[i]; bestS = i; }
-     if(o.dO[i] < minO){ minO = o.dO[i]; bestO = i; }
- }
- 
- if(bestS >= 0 && minS < 1.5 * G.cs){
-     let dA = distP(o.pS, B[bestS]), dB = distP(o.pS, B[(bestS+1)%n]);
-     ladosHtml += `<tr style="border-top:1px solid var(--bd)"><td>Inicio (○)</td><td>Lado ${bestS+1}</td><td><b>${dA.toFixed(1)} m</b> (V${bestS+1})</td><td><b>${dB.toFixed(1)} m</b> (V${(bestS+1)%n+1})</td></tr>`;
- }
- if(bestO >= 0 && minO < 1.5 * G.cs){
-     let dA = distP(o.pO, B[bestO]), dB = distP(o.pO, B[(bestO+1)%n]);
-     ladosHtml += `<tr style="border-top:1px solid var(--bd)"><td>Salida (◯)</td><td>Lado ${bestO+1}</td><td><b>${dA.toFixed(1)} m</b> (V${bestO+1})</td><td><b>${dB.toFixed(1)} m</b> (V${(bestO+1)%n+1})</td></tr>`;
- }
- 
- ladosHtml += '</table></div></div>';
- sd.innerHTML = baseHtml + ladosHtml;
-}
+Separación media a la franja de arriba: <b>${o.up==null?'—':o.up.toFixed(0)+' m'}</b> · a la de abajo: <b>${o.dn==null?'—':o.dn.toFixed(0)+' m'}</b>
+<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:6px"><tr style="text-align:left;color:var(--mu)"><th>Lado del contorno</th><th>Desde inicio</th><th>Desde salida</th><th>Mínima franja</th></tr>`+B.map((_,i)=>`<tr style="border-top:1px solid var(--bd)"><td>Lado ${i+1} (V${i+1}–V${(i+1)%n+1})</td><td>${f(o.dS[i])}</td><td>${f(o.dO[i])}</td><td>${f(o.dM[i])}</td></tr>`).join('')+'</table></div>'+ctHTML(o,B)+'<button class="s" onclick="showMap()" style="margin-top:8px">🗺️ Ver sobre el mapa real</button></div>'}
 function pickT(){pickMode=!pickMode;$('cv').style.cursor=pickMode?'crosshair':'';$('bt').classList.toggle('on',pickMode);$('ti').textContent=pickMode?'Haz clic en el mapa de abajo, en el punto donde quieres llevar el agua.':''}
-$('cv').addEventListener('click',e=>{if(!G)return;const r=$('cv').getBoundingClientRect(),f=$('cv').width/r.width;if(!pickMode){const x=G.minX+((e.clientX-r.left)*f-G.pad)/G.s,y=G.minY+(G.hc-G.pad-(e.clientY-r.top)*f)/G.s;let best=0,bd=1e9;for(const o of G.SS\vert{}\vert{}[])for(let i=0;i<o.pts.length-1;i++){const d=segD([x,y],o.pts[i],o.pts[i+1]);if(d<bd){bd=d;best=o.id}}if(best&&bd<=14/G.s+(+$('sw').value)/2){SEL=best===SEL?0:best;draw()}return}
+$('cv').addEventListener('click',e=>{if(!G)return;const r=$('cv').getBoundingClientRect(),f=$('cv').width/r.width;if(!pickMode){const x=G.minX+((e.clientX-r.left)*f-G.pad)/G.s,y=G.minY+(G.hc-G.pad-(e.clientY-r.top)*f)/G.s;let best=0,bd=1e9;for(const o of G.SS||[])for(let i=0;i<o.pts.length-1;i++){const d=segD([x,y],o.pts[i],o.pts[i+1]);if(d<bd){bd=d;best=o.id}}if(best&&bd<=14/G.s+(+$('sw').value)/2){SEL=best===SEL?0:best;draw()}return}
  TGT=[G.minX+((e.clientX-r.left)*f-G.pad)/G.s,G.minY+(G.hc-G.pad-(e.clientY-r.top)*f)/G.s];
  pickMode=false;$('cv').style.cursor='';$('bt').classList.remove('on');$('k6').checked=true;$('ti').textContent='Destino fijado. Ajusta separación, ancho o radio.';draw()});
 ['th','iv','rs','k1','k2','k3','k4','k5','k6','k7','sm','sv','sw','rd','ps'].forEach(id=>$(id).addEventListener('input',()=>{$('thv').textContent=$('th').value;if(G)draw()}));
 ex();
 </script><script>
-// Aumentamos tolerancia de clic a 40px para móviles
-const M=L.map('map', { tapTolerance: 40 }).setView([23.6,-102.5],5);
+const M=L.map('map').setView([23.6,-102.5],5);
 const esri=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Imagery © Esri'}).addTo(M);
 const osm=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'});
 L.control.layers({'Satélite':esri,'Calles':osm}).addTo(M);
-let V=[],Q=[],mode='';
-
-// Función de clic robusta y centralizada para TODAS las capas del mapa
-function onMapClick(e){
- const{lat,lng}=e.latlng;mm('');
+let V=[],Q=[],mode='',poly=L.polygon([],{color:'#ffd400',weight:3,fillOpacity:.12}).addTo(M),vg=L.layerGroup().addTo(M),pg=L.layerGroup().addTo(M);
+const mm=t=>$('mm').textContent=t;
+function setMode(m){mode=m;$('bc').classList.toggle('on',m==='c');$('bp').classList.toggle('on',m==='p');
+ $('mi').textContent=m==='c'?'Clic en cada esquina del predio (en orden). Cuando termines, pasa al paso 2.':m==='p'?'Clic dentro del contorno para marcar puntos de medición (reparte 10 o más).':''}
+function inside(lat,lon){return V.length>2&&pip(lon,lat,V.map(a=>[a[1],a[0]]))}
+function upd(){poly.setLatLngs(V);vg.clearLayers();V.forEach(v=>L.circleMarker(v,{radius:4,color:'#ffd400',fillOpacity:1}).addTo(vg))}
+function undo(){V.pop();upd()}
+function addPt(lat,lon){const q={lat,lon};q.m=L.circleMarker([lat,lon],{radius:4,color:'#fff',fillColor:'#e53935',fillOpacity:1,weight:1}).addTo(pg);Q.push(q)}
+M.on('click',e=>{const{lat,lng}=e.latlng;mm('');
  if(mode==='c'){V.push([lat,lng]);upd()}
  else if(mode==='p'){if(!inside(lat,lng)){mm('El punto debe quedar dentro del contorno (mínimo 3 vértices).');return}addPt(lat,lng)}
- else mm('Elige primero un modo: “Dibujar contorno” o “Marcar puntos”.')
-}
-M.on('click', onMapClick);
-
-// El polígono ya no confía en "interactive: false", ahora envía sus propios clics a onMapClick
-let poly=L.polygon([],{color:'#ffd400',weight:3,fillOpacity:.12}).on('click', onMapClick).addTo(M);
-let vg=L.layerGroup().addTo(M),pg=L.layerGroup().addTo(M);
-let mapOverlay = L.layerGroup().addTo(M);
-const mm=t=>$('mm').textContent=t;
-
-function setMode(m){
- mode=m;
- $('bc').classList.toggle('on',m==='c');
- $('bp').classList.toggle('on',m==='p');$('mi').textContent=m==='c'?'Clic en cada esquina del predio (en orden). Cuando termines, pasa al paso 2.':m==='p'?'Clic dentro del contorno para marcar puntos de medición (reparte 10 o más).':'';
- if(m) $('map').classList.add('draw-m'); else$('map').classList.remove('draw-m');
-}
-function inside(lat,lon){return V.length>2&&pip(lon,lat,V.map(a=>[a[1],a[0]]))}
-
-function upd(){
- poly.setLatLngs(V);
- vg.clearLayers();
- V.forEach(v=>{
-  // Los vértices envían sus clics a onMapClick en lugar de bloquearlos
-  L.circleMarker(v,{radius:4,color:'#ffd400',fillOpacity:1}).on('click', onMapClick).addTo(vg);
- });
-}
-function undo(){V.pop();upd()}
-
-function addPt(lat,lon){
- const q={lat,lon};
- // Los puntos de medición envían sus clics a onMapClick
- q.m=L.circleMarker([lat,lon],{radius:4,color:'#fff',fillColor:'#e53935',fillOpacity:1,weight:1}).on('click', onMapClick).addTo(pg);
- Q.push(q);
-}
- 
+ else mm('Elige primero un modo: “Dibujar contorno” o “Marcar puntos”.')});
 function mkGrid(){mm('');if(V.length<3){mm('Primero dibuja el contorno.');return}
  let sp=+$('sp').value||50,pts;
  const la=V.map(a=>a[0]),lo=V.map(a=>a[1]),a0=Math.min(...la),a1=Math.max(...la),o0=Math.min(...lo),o1=Math.max(...lo),mid=(a0+a1)/2;
@@ -349,9 +315,7 @@ function mkGrid(){mm('');if(V.length<3){mm('Primero dibuja el contorno.');return
   for(let y=a0+dl/2;y<a1;y+=dl)for(let x=o0+dn/2;x<o1;x+=dn)if(inside(y,x))pts.push([y,x]);
   if(pts.length<=350)break;sp*=1.25}
  pg.clearLayers();Q=[];pts.forEach(p=>addPt(p[0],p[1]));$('sp').value=Math.round(sp);mm(pts.length+' puntos generados.')}
- 
-function clr(){V=[];Q=[];upd();pg.clearLayers();mapOverlay.clearLayers();mm('');setMode('')}
-
+function clr(){V=[];Q=[];upd();pg.clearLayers();mm('');setMode('')}
 async function getElev(){mm('');
  if(V.length<3||Q.length<3){mm('Necesito el contorno (3+ vértices) y al menos 3 puntos dentro.');return}
  const all=[...V.map(v=>({lat:v[0],lon:v[1]})),...Q];mm('Consultando alturas…');
@@ -366,32 +330,40 @@ async function getElev(){mm('');
   catch(e2){mm('No pude obtener las alturas. Revisa tu conexión a internet.');return}}
  Q.forEach(q=>{q.m.bindTooltip(Math.round(q.z)+' m',{permanent:true,direction:'right',offset:[4,0]})});
  TGT=null;$('sys').value='latlon';
- $('b').value=V.map(v=>v[0].toFixed(6)+','+v[1].toFixed(6)).join('\n');$('p').value=all.map(p=>p.lat.toFixed(6)+','+p.lon.toFixed(6)+','+p.z).join('\n');
+ $('b').value=V.map(v=>v[0].toFixed(6)+','+v[1].toFixed(6)).join('\n');
+ $('p').value=all.map(p=>p.lat.toFixed(6)+','+p.lon.toFixed(6)+','+p.z).join('\n');
  mm('');draw();$('cv').scrollIntoView({behavior:'smooth',block:'center'})}
- 
-function verEnMapa(){
- if(!G || !G.tf_inv || $('sys').value === 'm') {$('ms').textContent='Primero genera el dibujo y asegúrate de usar Latitud/Longitud.';
-  return;
- }
- mapOverlay.clearLayers();
- 
- if(G && G.SS && G.SS.length > 0) {
-  G.SS.forEach(o => {
-   const latlons = o.pts.map(p => G.tf_inv(p[0], p[1]));
-   const p = L.polyline(latlons, {color: '#f39c12', weight: 4}).addTo(mapOverlay);
-   p.bindTooltip('F' + o.id, {permanent: true, direction: 'center'});
-  });
- }
-
- if(TGT){
-  const tll = G.tf_inv(TGT[0], TGT[1]);
-  L.circleMarker(tll, {radius: 8, color: '#7b1fa2', fillOpacity: 1, interactive:false}).addTo(mapOverlay).bindTooltip('Destino', {permanent: true});
- }
- 
- $('map').scrollIntoView({behavior:'smooth', block:'center'});
- if (G.SS && G.SS.length > 0) {
-     const latlons = G.SS[0].pts.map(p => G.tf_inv(p[0], p[1]));
-     M.fitBounds(L.polyline(latlons).getBounds());
- }
-}
+let M2=null,ov=null,view2=false;
+function togView(){
+ if(!G||!G.ll){$('hv').textContent='La vista sobre mapa real necesita un contorno dibujado en el mapa de arriba (coordenadas lat/lon). Dibuja el contorno, genera puntos y pulsa “Obtener alturas”.';return}
+ view2=!view2;$('cvw').style.display=view2?'none':'';$('map2').style.display=view2?'block':'none';$('bv').textContent=view2?'📐 Ver plano':'🗺️ Ver sobre mapa real';
+ if(!view2)return;
+ if(!M2){M2=L.map('map2').setView(M.getCenter(),M.getZoom());
+  const e2=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Imagery © Esri'}).addTo(M2),o2=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'});
+  L.control.layers({'Satélite':e2,'Calles':o2}).addTo(M2);ov=L.layerGroup().addTo(M2)}
+ fitNext=true;M2.invalidateSize();ovDraw()}
+function ovDraw(){
+ if(!view2||!M2)return;ov.clearLayers();if(!G||!G.ll)return;
+ M2.invalidateSize();const LL=p=>G.ll(p[0],p[1]),so=G.SS.find(o=>o.id===SEL),B=G.B;
+ L.polygon(B.map(LL),{color:'#ffd400',weight:3,fill:false,interactive:false}).addTo(ov);
+ if(G.ST.length)L.polyline(G.ST.map(t=>t.map(LL)),{color:'#2196f3',weight:2.5,opacity:.9,interactive:false}).addTo(ov);
+ for(const o of G.SS){const sel=o.id===SEL;
+  L.polyline(o.pts.map(LL),{color:sel?'#ffd400':'#ff8c00',weight:sel?7:5,opacity:sel?1:.8}).addTo(ov).on('click',()=>selS(o.id));
+  const stp=Math.max(3,Math.round(35/G.cs));
+  for(let t=stp;t<o.pts.length-1;t+=stp){const a=o.pts[t],b=o.pts[t+1];let az=Math.atan2(b[0]-a[0],b[1]-a[1])*180/Math.PI;if(t>=o.oi)az+=180;
+   L.marker(LL(a),{interactive:false,icon:L.divIcon({className:'',html:`<div style="transform:rotate(${az}deg);color:#fff;text-shadow:0 0 3px #000;font-size:13px;line-height:14px;text-align:center">▲</div>`,iconSize:[14,14],iconAnchor:[7,7]})}).addTo(ov)}
+  const mid=o.pts[o.pts.length>>1];
+  L.marker(LL(mid),{icon:L.divIcon({className:'',html:`<div style="background:${sel?'#1565d8':'#b34700'};color:#fff;border:2px solid #fff;border-radius:50%;width:24px;height:24px;line-height:20px;text-align:center;font:bold 11px sans-serif">${o.id}</div>`,iconSize:[24,24],iconAnchor:[12,12]})}).addTo(ov).on('click',()=>selS(o.id))}
+ B.forEach((p,i)=>L.circleMarker(LL(p),{radius:6,color:'#000',weight:2,fillColor:'#ffd400',fillOpacity:1,interactive:false}).bindTooltip('V'+(i+1),{permanent:true,direction:'top',offset:[0,-6],className:'tl'}).addTo(ov));
+ if(TGT)L.circle(G.ll(TGT[0],TGT[1]),{radius:Math.max(+$('rd').value||15,G.cs*1.5),color:'#ce93d8',weight:3,dashArray:'6 4',fillOpacity:.15,interactive:false}).bindTooltip('Destino',{permanent:true,className:'tl'}).addTo(ov);
+ let fp=B;
+ if(so){
+  L.circleMarker(LL(so.pS),{radius:7,color:'#000',weight:2,fillColor:'#fff',fillOpacity:1,interactive:false}).bindTooltip('Inicio',{permanent:true,direction:'bottom',className:'tl'}).addTo(ov);
+  L.circleMarker(LL(so.pO),{radius:8,color:'#fff',weight:2,fillColor:'#ff5722',fillOpacity:1,interactive:false}).bindTooltip('Salida',{permanent:true,direction:'bottom',className:'tl'}).addTo(ov);
+  const cts=contacts(so,B,G.cs);fp=[...so.pts];
+  for(const c of cts){const A=B[c.i],Bp=B[c.j];fp.push(A,Bp);
+   L.polyline([LL(A),LL(c.pt)],{color:'#00e5ff',weight:4,dashArray:'7 5',interactive:false}).bindTooltip('V'+(c.i+1)+' → '+c.dA.toFixed(0)+' m',{permanent:true,className:'tl'}).addTo(ov);
+   L.polyline([LL(c.pt),LL(Bp)],{color:'#ff4081',weight:4,dashArray:'7 5',interactive:false}).bindTooltip('V'+(c.j+1)+' → '+c.dB.toFixed(0)+' m',{permanent:true,className:'tl'}).addTo(ov);
+   L.circleMarker(LL(c.pt),{radius:6,color:'#000',weight:2,fillColor:'#76ff03',fillOpacity:1,interactive:false}).addTo(ov)}}
+ if(fitNext){fitNext=false;M2.fitBounds(L.latLngBounds(fp.map(LL)).pad(.25))}}
 </script></body></html>
