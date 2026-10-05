@@ -297,17 +297,21 @@ const M=L.map('map').setView([23.6,-102.5],5);
 const esri=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Imagery © Esri'}).addTo(M);
 const osm=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'});
 L.control.layers({'Satélite':esri,'Calles':osm}).addTo(M);
-let V=[],Q=[],mode='',poly=L.polygon([],{color:'#ffd400',weight:3,fillOpacity:.12}).addTo(M),vg=L.layerGroup().addTo(M),pg=L.layerGroup().addTo(M);
+let V=[],Q=[],mode='',poly=L.polygon([],{color:'#ffd400',weight:3,fillOpacity:.12,interactive:false}).addTo(M),vg=L.layerGroup().addTo(M),pg=L.layerGroup().addTo(M);
+let mapOverlay = L.layerGroup().addTo(M);
 const mm=t=>$('mm').textContent=t;
+
 function setMode(m){mode=m;$('bc').classList.toggle('on',m==='c');$('bp').classList.toggle('on',m==='p');$('mi').textContent=m==='c'?'Clic en cada esquina del predio (en orden). Cuando termines, pasa al paso 2.':m==='p'?'Clic dentro del contorno para marcar puntos de medición (reparte 10 o más).':''}
 function inside(lat,lon){return V.length>2&&pip(lon,lat,V.map(a=>[a[1],a[0]]))}
-function upd(){poly.setLatLngs(V);vg.clearLayers();V.forEach(v=>L.circleMarker(v,{radius:4,color:'#ffd400',fillOpacity:1}).addTo(vg))}
+function upd(){poly.setLatLngs(V);vg.clearLayers();V.forEach(v=>L.circleMarker(v,{radius:4,color:'#ffd400',fillOpacity:1,interactive:false}).addTo(vg))}
 function undo(){V.pop();upd()}
-function addPt(lat,lon){const q={lat,lon};q.m=L.circleMarker([lat,lon],{radius:4,color:'#fff',fillColor:'#e53935',fillOpacity:1,weight:1}).addTo(pg);Q.push(q)}
+function addPt(lat,lon){const q={lat,lon};q.m=L.circleMarker([lat,lon],{radius:4,color:'#fff',fillColor:'#e53935',fillOpacity:1,weight:1,interactive:false}).addTo(pg);Q.push(q)}
+
 M.on('click',e=>{const{lat,lng}=e.latlng;mm('');
  if(mode==='c'){V.push([lat,lng]);upd()}
  else if(mode==='p'){if(!inside(lat,lng)){mm('El punto debe quedar dentro del contorno (mínimo 3 vértices).');return}addPt(lat,lng)}
  else mm('Elige primero un modo: “Dibujar contorno” o “Marcar puntos”.')});
+ 
 function mkGrid(){mm('');if(V.length<3){mm('Primero dibuja el contorno.');return}
  let sp=+$('sp').value||50,pts;
  const la=V.map(a=>a[0]),lo=V.map(a=>a[1]),a0=Math.min(...la),a1=Math.max(...la),o0=Math.min(...lo),o1=Math.max(...lo),mid=(a0+a1)/2;
@@ -315,7 +319,9 @@ function mkGrid(){mm('');if(V.length<3){mm('Primero dibuja el contorno.');return
   for(let y=a0+dl/2;y<a1;y+=dl)for(let x=o0+dn/2;x<o1;x+=dn)if(inside(y,x))pts.push([y,x]);
   if(pts.length<=350)break;sp*=1.25}
  pg.clearLayers();Q=[];pts.forEach(p=>addPt(p[0],p[1]));$('sp').value=Math.round(sp);mm(pts.length+' puntos generados.')}
-function clr(){V=[];Q=[];upd();pg.clearLayers();mm('');setMode('')}
+ 
+function clr(){V=[];Q=[];upd();pg.clearLayers();mapOverlay.clearLayers();mm('');setMode('')}
+
 async function getElev(){mm('');
  if(V.length<3||Q.length<3){mm('Necesito el contorno (3+ vértices) y al menos 3 puntos dentro.');return}
  const all=[...V.map(v=>({lat:v[0],lon:v[1]})),...Q];mm('Consultando alturas…');
@@ -333,27 +339,27 @@ async function getElev(){mm('');
  $('b').value=V.map(v=>v[0].toFixed(6)+','+v[1].toFixed(6)).join('\n');$('p').value=all.map(p=>p.lat.toFixed(6)+','+p.lon.toFixed(6)+','+p.z).join('\n');
  mm('');draw();$('cv').scrollIntoView({behavior:'smooth',block:'center'})}
  
-let mapOverlay = L.layerGroup().addTo(M);
-
 function verEnMapa(){
  if(!G || !G.tf_inv || $('sys').value === 'm') {$('ms').textContent='Primero genera el dibujo y asegúrate de usar Latitud/Longitud.';
   return;
  }
  mapOverlay.clearLayers();
  
- G.SS.forEach(o => {
-  const latlons = o.pts.map(p => G.tf_inv(p[0], p[1]));
-  const poly = L.polyline(latlons, {color: '#f39c12', weight: 4}).addTo(mapOverlay);
-  poly.bindTooltip('F' + o.id, {permanent: true, direction: 'center'});
- });
+ if(G && G.SS && G.SS.length > 0) {
+  G.SS.forEach(o => {
+   const latlons = o.pts.map(p => G.tf_inv(p[0], p[1]));
+   const poly = L.polyline(latlons, {color: '#f39c12', weight: 4}).addTo(mapOverlay);
+   poly.bindTooltip('F' + o.id, {permanent: true, direction: 'center'});
+  });
+ }
 
  if(TGT){
   const tll = G.tf_inv(TGT[0], TGT[1]);
-  L.circleMarker(tll, {radius: 8, color: '#7b1fa2', fillOpacity: 1}).addTo(mapOverlay).bindTooltip('Destino', {permanent: true});
+  L.circleMarker(tll, {radius: 8, color: '#7b1fa2', fillOpacity: 1, interactive:false}).addTo(mapOverlay).bindTooltip('Destino', {permanent: true});
  }
  
  $('map').scrollIntoView({behavior:'smooth', block:'center'});
- if (G.SS.length > 0) {
+ if (G.SS && G.SS.length > 0) {
      const latlons = G.SS[0].pts.map(p => G.tf_inv(p[0], p[1]));
      M.fitBounds(L.polyline(latlons).getBounds());
  }
