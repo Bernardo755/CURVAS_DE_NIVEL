@@ -80,6 +80,21 @@
 
   <section class="panel">
     <details>
+      <summary>Buscar dispositivos en la red</summary>
+      <p class="note">Prueba cada dirección de tu red y lista las que responden con una página web (cámaras, pero también router, impresoras, etc.). No identifica la marca. Los números de la dirección de tu red están en el router o en el WiFi de tu computadora (por ejemplo 192.168.1).</p>
+      <div class="row">
+        <label>Red <input id="net" value="192.168.1" size="12"></label>
+        <label>Puerto <select id="port"><option>80</option><option>8080</option><option>8000</option><option>8081</option></select></label>
+        <button id="scan">Buscar</button>
+      </div>
+      <progress id="sprog" value="0" max="254" hidden style="margin-top:10px"></progress>
+      <p class="note" id="sinfo"></p>
+      <div id="sres" style="display:grid;gap:8px"></div>
+    </details>
+  </section>
+
+  <section class="panel">
+    <details id="livebox">
       <summary>Vista en vivo (opcional)</summary>
       <p class="note">Solo funciona si tu cámara ofrece una imagen o un video MJPEG por HTTP. Pega aquí su dirección. Si pide usuario y contraseña, el navegador te los preguntará.</p>
       <div class="row">
@@ -270,6 +285,32 @@ $('#live').onclick = () => {
   img.onload = () => { liveTimer = setTimeout(tick, 1000); };
   tick();
 };
+
+// Escaneo aproximado de la red: un fetch sin CORS responde si hay un servidor web en esa dirección
+$('#scan').onclick = async () => {
+  const net = $('#net').value.trim().replace(/\.$/, ''), port = $('#port').value;
+  if (!/^\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(net)) return ($('#sinfo').textContent = 'Escribe los tres primeros números de tu red, por ejemplo 192.168.1');
+  $('#scan').disabled = true; $('#sres').innerHTML = ''; $('#sprog').hidden = false; $('#sprog').value = 0;
+  $('#sinfo').textContent = 'Buscando…';
+  let n = 0, found = 0;
+  const check = async (i) => {
+    const ip = `${net}.${i}`, url = `http://${ip}:${port}/`, ac = new AbortController();
+    const t = setTimeout(() => ac.abort(), 1500);
+    try {
+      await fetch(url, { mode: 'no-cors', signal: ac.signal, cache: 'no-store' });
+      found++;
+      const d = document.createElement('div'); d.className = 'row';
+      d.innerHTML = `<strong style="min-width:120px">${ip}</strong><a href="${url}" target="_blank" rel="noopener"><button>Abrir su página</button></a><button class="use">Usar para vista en vivo</button>`;
+      d.querySelector('.use').onclick = () => { $('#liveUrl').value = url; $('#livebox').open = true; $('#liveUrl').focus(); };
+      $('#sres').appendChild(d);
+    } catch {}
+    clearTimeout(t); $('#sprog').value = ++n;
+  };
+  const q = Array.from({ length: 254 }, (_, i) => i + 1);
+  await Promise.all(Array.from({ length: 40 }, async () => { while (q.length) await check(q.shift()); }));
+  $('#sinfo').textContent = found ? `${found} dispositivo(s) con página web. Abre cada una para ver cuál es tu cámara.` : 'No encontré nada en ese puerto. Prueba otro puerto o revisa que la red sea la correcta.';
+  $('#scan').disabled = false; $('#sprog').hidden = true;
+};
 </script>
 </body>
-        </html>
+</html>
