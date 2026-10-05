@@ -27,7 +27,9 @@ canvas{max-width:100%;height:auto;border-radius:8px;border:1px solid var(--bd);d
 #st{font-size:13px;color:var(--mu);margin-top:8px}
 #hv{font-size:13px;min-height:20px;margin-top:6px}
 .ms{color:#c0392b;font-size:13px}
-small{color:var(--mu)}.tb{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px}.tb button{margin:0}.tb input{width:80px}button.on{outline:3px solid #f1c40f}#map{height:440px;border-radius:8px;border:1px solid var(--bd)}
+small{color:var(--mu)}.tb{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px}.tb button{margin:0}.tb input{width:80px}button.on{outline:3px solid #f1c40f}
+#map{height:440px;border-radius:8px;border:1px solid var(--bd)}
+.draw-m, .draw-m .leaflet-interactive, .draw-m .leaflet-container { cursor: crosshair !important; }
 </style><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"><script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script></head><body><div class="w">
 <h1>🌲 Curvas de nivel y flujo de agua</h1>
 <p class="sub">Para planear reforestación: siembra siguiendo las curvas y ubica zanjas/barreras donde se concentra el agua.</p>
@@ -293,24 +295,52 @@ $('cv').addEventListener('click',e=>{if(!G)return;const r=$('cv').getBoundingCli
 ['th','iv','rs','k1','k2','k3','k4','k5','k6','k7','sm','sv','sw','rd','ps'].forEach(id=>$(id).addEventListener('input',()=>{$('thv').textContent=$('th').value;if(G)draw()}));
 ex();
 </script><script>
-const M=L.map('map').setView([23.6,-102.5],5);
+// Aumentamos tolerancia de clic a 40px para móviles
+const M=L.map('map', { tapTolerance: 40 }).setView([23.6,-102.5],5);
 const esri=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'Imagery © Esri'}).addTo(M);
 const osm=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'© OpenStreetMap'});
 L.control.layers({'Satélite':esri,'Calles':osm}).addTo(M);
-let V=[],Q=[],mode='',poly=L.polygon([],{color:'#ffd400',weight:3,fillOpacity:.12,interactive:false}).addTo(M),vg=L.layerGroup().addTo(M),pg=L.layerGroup().addTo(M);
+let V=[],Q=[],mode='';
+
+// Función de clic robusta y centralizada para TODAS las capas del mapa
+function onMapClick(e){
+ const{lat,lng}=e.latlng;mm('');
+ if(mode==='c'){V.push([lat,lng]);upd()}
+ else if(mode==='p'){if(!inside(lat,lng)){mm('El punto debe quedar dentro del contorno (mínimo 3 vértices).');return}addPt(lat,lng)}
+ else mm('Elige primero un modo: “Dibujar contorno” o “Marcar puntos”.')
+}
+M.on('click', onMapClick);
+
+// El polígono ya no confía en "interactive: false", ahora envía sus propios clics a onMapClick
+let poly=L.polygon([],{color:'#ffd400',weight:3,fillOpacity:.12}).on('click', onMapClick).addTo(M);
+let vg=L.layerGroup().addTo(M),pg=L.layerGroup().addTo(M);
 let mapOverlay = L.layerGroup().addTo(M);
 const mm=t=>$('mm').textContent=t;
 
-function setMode(m){mode=m;$('bc').classList.toggle('on',m==='c');$('bp').classList.toggle('on',m==='p');$('mi').textContent=m==='c'?'Clic en cada esquina del predio (en orden). Cuando termines, pasa al paso 2.':m==='p'?'Clic dentro del contorno para marcar puntos de medición (reparte 10 o más).':''}
+function setMode(m){
+ mode=m;
+ $('bc').classList.toggle('on',m==='c');
+ $('bp').classList.toggle('on',m==='p');$('mi').textContent=m==='c'?'Clic en cada esquina del predio (en orden). Cuando termines, pasa al paso 2.':m==='p'?'Clic dentro del contorno para marcar puntos de medición (reparte 10 o más).':'';
+ if(m) $('map').classList.add('draw-m'); else$('map').classList.remove('draw-m');
+}
 function inside(lat,lon){return V.length>2&&pip(lon,lat,V.map(a=>[a[1],a[0]]))}
-function upd(){poly.setLatLngs(V);vg.clearLayers();V.forEach(v=>L.circleMarker(v,{radius:4,color:'#ffd400',fillOpacity:1,interactive:false}).addTo(vg))}
-function undo(){V.pop();upd()}
-function addPt(lat,lon){const q={lat,lon};q.m=L.circleMarker([lat,lon],{radius:4,color:'#fff',fillColor:'#e53935',fillOpacity:1,weight:1,interactive:false}).addTo(pg);Q.push(q)}
 
-M.on('click',e=>{const{lat,lng}=e.latlng;mm('');
- if(mode==='c'){V.push([lat,lng]);upd()}
- else if(mode==='p'){if(!inside(lat,lng)){mm('El punto debe quedar dentro del contorno (mínimo 3 vértices).');return}addPt(lat,lng)}
- else mm('Elige primero un modo: “Dibujar contorno” o “Marcar puntos”.')});
+function upd(){
+ poly.setLatLngs(V);
+ vg.clearLayers();
+ V.forEach(v=>{
+  // Los vértices envían sus clics a onMapClick en lugar de bloquearlos
+  L.circleMarker(v,{radius:4,color:'#ffd400',fillOpacity:1}).on('click', onMapClick).addTo(vg);
+ });
+}
+function undo(){V.pop();upd()}
+
+function addPt(lat,lon){
+ const q={lat,lon};
+ // Los puntos de medición envían sus clics a onMapClick
+ q.m=L.circleMarker([lat,lon],{radius:4,color:'#fff',fillColor:'#e53935',fillOpacity:1,weight:1}).on('click', onMapClick).addTo(pg);
+ Q.push(q);
+}
  
 function mkGrid(){mm('');if(V.length<3){mm('Primero dibuja el contorno.');return}
  let sp=+$('sp').value||50,pts;
@@ -348,8 +378,8 @@ function verEnMapa(){
  if(G && G.SS && G.SS.length > 0) {
   G.SS.forEach(o => {
    const latlons = o.pts.map(p => G.tf_inv(p[0], p[1]));
-   const poly = L.polyline(latlons, {color: '#f39c12', weight: 4}).addTo(mapOverlay);
-   poly.bindTooltip('F' + o.id, {permanent: true, direction: 'center'});
+   const p = L.polyline(latlons, {color: '#f39c12', weight: 4}).addTo(mapOverlay);
+   p.bindTooltip('F' + o.id, {permanent: true, direction: 'center'});
   });
  }
 
