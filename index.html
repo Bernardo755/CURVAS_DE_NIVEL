@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Archivo de cámaras</title>
+<style>
+  :root{--bg:#eef1f5;--panel:#fff;--ink:#1c2433;--mute:#667085;--line:#d5dbe5;--accent:#2b3a8f;--seg:#e0a526;--seg-on:#b4570a;--bad:#c0392b}
+  @media (prefers-color-scheme:dark){:root{--bg:#141922;--panel:#1d2430;--ink:#e7ebf2;--mute:#9aa4b5;--line:#313b4b;--accent:#8fa2ff;--seg:#c9922a;--seg-on:#ffb454;--bad:#ff8a7a}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 "Segoe UI",system-ui,sans-serif}
+  main{max-width:1000px;margin:0 auto;padding:20px 16px 40px;display:grid;gap:16px}
+  h1{font-size:22px;margin:0;letter-spacing:-.01em}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px}
+  .row{display:flex;flex-wrap:wrap;gap:12px;align-items:end}
+  label{display:grid;gap:4px;font-size:13px;color:var(--mute)}
+  select,input{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:7px 9px}
+  button{font:inherit;cursor:pointer;border-radius:6px;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:8px 14px}
+  button:disabled{opacity:.5;cursor:default}
+  button.main{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  @media (prefers-color-scheme:dark){button.main{color:#10163a}}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .stage{background:#000;border-radius:6px;aspect-ratio:16/9;overflow:hidden;display:grid;place-items:center}
+  .stage video,.stage img{width:100%;height:100%;object-fit:contain;background:#000}
+  .stage p{color:#9aa4b5;margin:0;padding:20px;text-align:center}
+  .tl{position:relative;height:46px;background:var(--bg);border:1px solid var(--line);border-radius:6px;margin-top:10px}
+  .tl i{position:absolute;top:0;bottom:16px;background:var(--seg);border:0;padding:0;min-width:2px;cursor:pointer;border-radius:2px}
+  .tl i.bad{background:repeating-linear-gradient(45deg,var(--seg),var(--seg) 3px,transparent 3px,transparent 6px)}
+  .tl i.on{background:var(--seg-on)}
+  .tl span{position:absolute;bottom:1px;font-size:11px;color:var(--mute);transform:translateX(-50%)}
+  .tl .sel{position:absolute;top:0;bottom:16px;background:var(--accent);opacity:.28;pointer-events:none}
+  ul{list-style:none;margin:0;padding:0;max-height:220px;overflow:auto}
+  li button{width:100%;text-align:left;border:0;border-bottom:1px solid var(--line);border-radius:0;background:none;display:flex;justify-content:space-between;gap:12px}
+  li button.on{color:var(--accent);font-weight:600}
+  .note{color:var(--mute);font-size:13px;margin:8px 0 0}
+  #msg{min-height:18px}.err{color:var(--bad)!important}
+  progress{width:100%;height:8px}
+  details summary{cursor:pointer;font-weight:600}
+</style>
+</head>
+<body>
+<main>
+  <h1>Archivo de cámaras</h1>
+
+  <section class="panel">
+    <div class="row">
+      <label>Carpeta de la memoria SD
+        <input type="file" id="folder" webkitdirectory multiple>
+      </label>
+      <label>Día <input type="date" id="date" disabled></label>
+      <button id="prev" disabled>Día anterior</button>
+      <button id="next" disabled>Día siguiente</button>
+    </div>
+    <p class="note" id="info">Conecta la tarjeta SD a la computadora (lector de tarjetas), pulsa el botón de arriba y elige la unidad completa. Los archivos no se suben a ningún lado: se leen en tu navegador.</p>
+  </section>
+
+  <section class="panel">
+    <div class="stage" id="stage"><p>Elige una carpeta y luego un tramo de la línea de tiempo para reproducirlo.</p></div>
+    <div class="tl" id="tl" aria-label="Línea de tiempo del día"></div>
+    <p class="note" id="count"></p>
+    <div class="row" style="margin-top:8px">
+      <button id="mark1" disabled>Marcar inicio aquí</button>
+      <button id="mark2" disabled>Marcar fin aquí</button>
+      <button id="orig" disabled>Guardar este archivo completo</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="row">
+      <label>Desde <input type="time" id="t1" step="1" value="08:00:00"></label>
+      <label>Hasta <input type="time" id="t2" step="1" value="08:05:00"></label>
+      <button class="main" id="dl" disabled>Crear y descargar clip</button>
+    </div>
+    <progress id="prog" value="0" max="1" hidden></progress>
+    <p class="note" id="msg"></p>
+    <p class="note">El clip se graba en tiempo real: uno de 5 minutos tarda 5 minutos. Deja esta pestaña visible mientras se crea. No incluye audio.</p>
+  </section>
+
+  <section class="panel"><ul id="list"></ul></section>
+
+  <section class="panel">
+    <details>
+      <summary>Vista en vivo (opcional)</summary>
+      <p class="note">Solo funciona si tu cámara ofrece una imagen o un video MJPEG por HTTP. Pega aquí su dirección. Si pide usuario y contraseña, el navegador te los preguntará.</p>
+      <div class="row">
+        <label style="flex:1;min-width:260px">Dirección
+          <input id="liveUrl" placeholder="http://192.168.1.50/snapshot.jpg">
+        </label>
+        <label>Tipo
+          <select id="liveMode"><option value="snap">Imagen (se refresca cada segundo)</option><option value="mjpeg">Video MJPEG continuo</option></select>
+        </label>
+        <button id="live">Ver en vivo</button>
+      </div>
+    </details>
+  </section>
+</main>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const pad = (n) => String(n).padStart(2, '0');
+const hm = (t) => { const d = new Date(t); return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; };
+const VID = /\.(mp4|mov|mkv|avi|webm|m4v|ts)$/i;
+const TS = /(20\d{2})[-_/\\]?(\d{2})[-_/\\]?(\d{2})[-_/\\ T]?(\d{2})[-_.]?(\d{2})[-_.]?(\d{2})/;
+const T_DAY = 864e5;
+let files = [], segs = [], dayStart = 0, cur = null, curUrl = null, busy = false, liveTimer = null;
+const durCache = new Map();
+
+const say = (t, bad) => { const m = $('#msg'); m.textContent = t; m.classList.toggle('err', !!bad); };
+const ymd = (t) => { const d = new Date(t); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+const stamp = (t) => new Date($('#date').value + 'T' + t).getTime();
+
+function probe(f) {
+  if (durCache.has(f)) return Promise.resolve(durCache.get(f));
+  return new Promise((resolve) => {
+    const v = document.createElement('video'), u = URL.createObjectURL(f);
+    const done = (d) => { URL.revokeObjectURL(u); v.removeAttribute('src'); durCache.set(f, d); resolve(d); };
+    v.preload = 'metadata';
+    v.onloadedmetadata = () => done(isFinite(v.duration) && v.duration > 0 ? v.duration : null);
+    v.onerror = () => done(null);
+    setTimeout(() => done(null), 6000);
+    v.src = u;
+  });
+}
+
+$('#folder').onchange = (e) => {
+  files = [...e.target.files].filter((f) => VID.test(f.name)).map((f) => {
+    const path = f.webkitRelativePath || f.name;
+    const m = f.name.match(TS) || path.match(TS);
+    return { f, mtime: f.lastModified, start: m ? new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]).getTime() : null };
+  });
+  if (!files.length) { $('#info').textContent = 'No encontré videos en esa carpeta. Elige la unidad completa de la memoria SD.'; return; }
+  const latest = Math.max(...files.map((x) => x.start ?? x.mtime));
+  $('#date').value = ymd(latest);
+  ['#date', '#prev', '#next', '#dl'].forEach((s) => ($(s).disabled = false));
+  $('#info').textContent = `${files.length} archivos de video encontrados.`;
+  load();
+};
+
+async function load() {
+  const day = new Date($('#date').value + 'T00:00:00').getTime(), end = day + T_DAY, slack = 6 * 36e5;
+  dayStart = day;
+  const cand = files.filter((x) => x.start != null ? x.start > day - slack && x.start < end : x.mtime > day && x.mtime < end + slack);
+  $('#count').textContent = 'Leyendo duraciones…';
+  const out = []; let i = 0;
+  await Promise.all([0, 1, 2, 3].map(async () => {
+    while (i < cand.length) {
+      const x = cand[i++], d = await probe(x.f);
+      let s = x.start, e;
+      if (d) { if (s == null) s = x.mtime - d * 1000; e = s + d * 1000; }
+      else { if (s == null) continue; e = x.mtime > s ? x.mtime : s + 60000; }
+      if (e > day && s < end) out.push({ ...x, s, e, d, ok: !!d });
+    }
+  }));
+  segs = out.sort((a, b) => a.s - b.s);
+  render();
+}
+
+function render() {
+  const tl = $('#tl'); tl.innerHTML = '';
+  for (let h = 0; h <= 24; h += 3) { const s = document.createElement('span'); s.style.left = (h / 24 * 100) + '%'; s.textContent = pad(h % 24) + ':00'; tl.appendChild(s); }
+  const sel = document.createElement('div'); sel.className = 'sel'; sel.id = 'sel'; tl.appendChild(sel);
+  segs.forEach((s, k) => {
+    const b = document.createElement('i'), a = Math.max(s.s, dayStart), z = Math.min(s.e, dayStart + T_DAY);
+    b.style.left = ((a - dayStart) / T_DAY * 100) + '%'; b.style.width = ((z - a) / T_DAY * 100) + '%';
+    b.title = `${hm(s.s)} – ${hm(s.e)}`; b.dataset.k = k; if (!s.ok) b.classList.add('bad');
+    b.setAttribute('aria-label', 'Reproducir ' + b.title); b.onclick = () => play(k);
+    tl.appendChild(b);
+  });
+  const bad = segs.filter((s) => !s.ok).length;
+  $('#count').textContent = segs.length
+    ? `${segs.length} archivos este día.` + (bad ? ` ${bad} (rayados) no se pueden leer en este navegador, probablemente por el formato H.265.` : '')
+    : 'No hay grabaciones este día.';
+  $('#list').innerHTML = segs.map((s, k) => `<li><button data-k="${k}"><span>${hm(s.s)} – ${hm(s.e)}${s.ok ? '' : ' (no reproducible)'}</span><span>${s.f.name}</span></button></li>`).join('');
+  document.querySelectorAll('#list button').forEach((b) => (b.onclick = () => play(+b.dataset.k)));
+  paintSel();
+}
+
+function paintSel() {
+  const sel = $('#sel'); if (!sel || !$('#date').value) return;
+  const a = stamp($('#t1').value), z = stamp($('#t2').value);
+  sel.style.left = ((a - dayStart) / T_DAY * 100) + '%'; sel.style.width = (Math.max(0, z - a) / T_DAY * 100) + '%';
+}
+
+function stopLive() { clearTimeout(liveTimer); liveTimer = null; }
+
+function play(k) {
+  stopLive();
+  const s = segs[k]; cur = s;
+  if (curUrl) URL.revokeObjectURL(curUrl);
+  curUrl = URL.createObjectURL(s.f);
+  $('#stage').innerHTML = `<video controls autoplay src="${curUrl}"></video>`;
+  $('#stage video').onerror = () => { $('#stage').innerHTML = '<p>Este navegador no puede reproducir este archivo (formato H.265). Prueba con Microsoft Edge o guarda el archivo y ábrelo con VLC.</p>'; };
+  $('#t1').value = hm(s.s); $('#t2').value = hm(s.e);
+  ['#mark1', '#mark2', '#orig'].forEach((x) => ($(x).disabled = false));
+  document.querySelectorAll('.tl i,#list button').forEach((e) => e.classList.toggle('on', +e.dataset.k === k));
+  paintSel();
+}
+
+const nowAt = () => { const v = $('#stage video'); return cur && v ? cur.s + v.currentTime * 1000 : null; };
+$('#mark1').onclick = () => { const t = nowAt(); if (t) { $('#t1').value = hm(t); paintSel(); } };
+$('#mark2').onclick = () => { const t = nowAt(); if (t) { $('#t2').value = hm(t); paintSel(); } };
+$('#t1').oninput = $('#t2').oninput = paintSel;
+$('#orig').onclick = () => save(cur.f, cur.f.name);
+
+function save(blob, name) {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+}
+
+$('#dl').onclick = async () => {
+  if (busy) return;
+  const a = stamp($('#t1').value), z = stamp($('#t2').value);
+  if (!(z > a)) return say('La hora final debe ser posterior a la inicial.', true);
+  const list = segs.filter((s) => s.ok && s.e > a && s.s < z);
+  if (!list.length) return say('No hay video legible en ese rango.', true);
+  if (typeof MediaRecorder === 'undefined') return say('Este navegador no puede grabar clips. Usa Chrome o Edge.', true);
+  busy = true; $('#dl').disabled = true; $('#prog').hidden = false; $('#prog').value = 0;
+  try {
+    const mime = ['video/mp4;codecs=avc1', 'video/webm;codecs=vp9', 'video/webm'].find((m) => MediaRecorder.isTypeSupported(m));
+    const v = document.createElement('video'), c = document.createElement('canvas'), ctx = c.getContext('2d');
+    v.muted = true; v.playsInline = true;
+    let rec, chunks = [], done = 0;
+    const total = Math.min(z, list[list.length - 1].e) - Math.max(a, list[0].s);
+    for (const s of list) {
+      const u = URL.createObjectURL(s.f); v.src = u;
+      await new Promise((r, j) => { v.onloadedmetadata = r; v.onerror = () => j(new Error('No se pudo leer ' + s.f.name)); });
+      if (!rec) {
+        c.width = v.videoWidth; c.height = v.videoHeight;
+        rec = new MediaRecorder(c.captureStream(25), { mimeType: mime, videoBitsPerSecond: 4e6 });
+        rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+        rec.start(1000);
+      }
+      const from = Math.max(0, (a - s.s) / 1000), to = Math.min(s.d, (z - s.s) / 1000);
+      v.currentTime = from; await new Promise((r) => (v.onseeked = r));
+      await v.play();
+      await new Promise((res) => {
+        const draw = () => {
+          ctx.drawImage(v, 0, 0, c.width, c.height);
+          $('#prog').value = Math.min(1, (done + (v.currentTime - from) * 1000) / total);
+          if (v.currentTime >= to || v.ended) return res();
+          requestAnimationFrame(draw);
+        };
+        draw();
+      });
+      v.pause(); done += (to - from) * 1000; URL.revokeObjectURL(u);
+    }
+    await new Promise((r) => { rec.onstop = r; rec.stop(); });
+    const ext = mime.startsWith('video/mp4') ? 'mp4' : 'webm';
+    save(new Blob(chunks, { type: mime }), `clip_${ymd(a)}_${hm(a).replace(/:/g, '-')}_${hm(z).replace(/:/g, '-')}.${ext}`);
+    say('Listo, el clip se descargó.');
+  } catch (e) { say(e.message || 'Error al crear el clip.', true); }
+  busy = false; $('#dl').disabled = false; $('#prog').hidden = true;
+};
+
+$('#date').onchange = load;
+const shift = (n) => { const d = new Date($('#date').value + 'T12:00:00'); d.setDate(d.getDate() + n); $('#date').value = ymd(d); load(); };
+$('#prev').onclick = () => shift(-1); $('#next').onclick = () => shift(1);
+
+// Vista en vivo por HTTP (imagen o MJPEG)
+try { $('#liveUrl').value = localStorage.getItem('liveUrl') || ''; } catch {}
+$('#live').onclick = () => {
+  const url = $('#liveUrl').value.trim(); if (!url) return;
+  try { localStorage.setItem('liveUrl', url); } catch {}
+  stopLive();
+  const img = document.createElement('img'); img.alt = 'Vista en vivo';
+  $('#stage').innerHTML = ''; $('#stage').appendChild(img);
+  img.onerror = () => { stopLive(); $('#stage').innerHTML = '<p>No se pudo cargar la imagen. Revisa la dirección, o es posible que tu cámara no ofrezca imagen por HTTP.</p>'; };
+  if ($('#liveMode').value === 'mjpeg') { img.src = url; return; }
+  const tick = () => { img.src = url + (url.includes('?') ? '&' : '?') + 't=' + Date.now(); };
+  img.onload = () => { liveTimer = setTimeout(tick, 1000); };
+  tick();
+};
+</script>
+</body>
+        </html>
