@@ -66,16 +66,17 @@ small{color:var(--mu)}.tb{display:flex;flex-wrap:wrap;gap:8px;align-items:center
 <div class="r"><div><label>Separar por</label><select id="sm"><option value="v">Desnivel (m)</option><option value="h">Distancia horizontal (m)</option></select></div>
 <div><label>Valor</label><input type="number" id="sv" value="2" min="0.2" step="0.5"></div>
 <div><label>Ancho (m)</label><input type="number" id="sw" value="3" min="0.5" step="0.5"></div></div>
+<div class="r"><div><label>Plantas cada (m)</label><input type="number" id="ps" value="3" min="0.5" step="0.5"></div><div></div></div>
 <div class="r"><div><label>Radio del destino (m)</label><input type="number" id="rd" value="15" min="3"></div>
 <div style="display:flex;align-items:flex-end;gap:6px"><button class="s" id="bt" onclick="pickT()" style="margin:0">📍 Elegir destino</button><button class="s" onclick="TGT=null;draw()" style="margin:0">Quitar</button></div></div>
 <div class="k"><label><input type="checkbox" id="k7">Ver flujo SIN franjas (comparar)</label></div>
-<small id="ti">Pulsa “Elegir destino” y haz clic en el mapa donde quieres llevar el agua (represa, zona baja, cárcava).</small></div>
+<small id="ti">Tras generar las franjas, haz clic en una (o en la tabla) para ver su detalle. Pulsa “Elegir destino” y haz clic en el mapa donde quieres llevar el agua (represa, zona baja, cárcava).</small></div>
 <div class="r"><button onclick="draw()">Dibujar</button><button class="s" onclick="ex()">Ejemplo</button></div>
 <div class="ms" id="ms"></div>
 </div>
 <div class="c"><div class="cv"><canvas id="cv" width="900" height="600"></canvas></div>
 <div id="hv">Pasa el cursor sobre el mapa para ver elevación, pendiente y acumulación de agua.</div>
-<div id="st"></div></div>
+<div id="st"></div><div id="sd"></div><div id="sl"></div></div>
 </div></div>
 <script>
 const $=id=>document.getElementById(id);
@@ -84,17 +85,17 @@ const EXP="0,0,1520\n200,0,1505\n400,0,1495\n420,200,1530\n350,320,1565\n150,300
 function ex(){TGT=null;$('sys').value='m';$('b').value=EXB;$('p').value=EXP;draw()}
 function parse(t){return t.split(/\n/).map(l=>l.trim().split(/[\s,;\t]+/).map(Number)).filter(a=>a.length>=2&&a.every(v=>!isNaN(v)))}
 function pip(x,y,B){let c=false;for(let i=0,j=B.length-1;i<B.length;j=i++){const a=B[i],b=B[j];if((a[1]>y)!==(b[1]>y)&&x<(b[0]-a[0])*(y-a[1])/(b[1]-a[1])+a[0])c=!c}return c}
-let G=null,TGT=null,pickMode=false;
+let G=null,TGT=null,pickMode=false,SEL=0;
 function draw(){
  $('ms').textContent='';
  let B=parse($('b').value),P=parse($('p').value).filter(a=>a.length>=3);
  if(B.length<3||P.length<3){$('ms').textContent='Necesito 3+ vértices de contorno y 3+ puntos x,y,z.';return}
- const sys=$('sys').value;
+ const sys=$('sys').value;let inv=(x,y)=>`X ${x.toFixed(1)} · Y ${y.toFixed(1)}`;
  if(sys!=='m'){
   const g=a=>sys==='latlon'?[a[1],a[0]]:[a[0],a[1]];
   const all=[...B,...P].map(g),lo0=all.reduce((s,a)=>s+a[0],0)/all.length,la0=all.reduce((s,a)=>s+a[1],0)/all.length;
   const tf=a=>{const [lo,la]=g(a);return [(lo-lo0)*111320*Math.cos(la0*Math.PI/180),(la-la0)*110540,a[2]]};
-  B=B.map(tf);P=P.map(tf);
+  B=B.map(tf);P=P.map(tf);inv=(x,y)=>(la0+y/110540).toFixed(6)+', '+(lo0+x/(111320*Math.cos(la0*Math.PI/180))).toFixed(6);
  }
  const xs=B.map(a=>a[0]),ys=B.map(a=>a[1]);
  const minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys);
@@ -158,9 +159,31 @@ function draw(){
  const sOff=$('k7').checked&&useS;
  dir.set(sOff?dir0:dir1);acc.set(sOff?acc0:acc1);
  if(TGT)rep+=`<br>📍 Área que pasa por el destino: <b>${(tgA(dir0,acc0)/10000).toFixed(2)} ha</b> sin franjas`+(useS?` → <b>${(tgA(dir1,acc1)/10000).toFixed(2)} ha</b> con franjas`:'')+'.';
- if(useS){SS=SL.map(L=>{const sg=segsAt(L);return{L,sg,len:sg.reduce((t,[a,b])=>t+Math.hypot(a[0]-b[0],a[1]-b[1]),0)}}).filter(o=>o.len>cs*3);
+ if(useS){const chain=sg=>{const key=p=>Math.round(p[0]*100)+','+Math.round(p[1]*100),mp=new Map(),used=new Uint8Array(sg.length),out=[];
+   sg.forEach(([a,b],i)=>{for(const p of[a,b]){const k=key(p);if(!mp.has(k))mp.set(k,[]);mp.get(k).push(i)}});
+   const nx2=p=>{for(const i of mp.get(key(p))||[])if(!used[i])return i;return -1};
+   for(let i=0;i<sg.length;i++){if(used[i])continue;used[i]=1;const pts=[sg[i][0],sg[i][1]];
+    for(let r=0;r<2;r++){for(;;){const e=pts[pts.length-1],j=nx2(e);if(j<0)break;used[j]=1;const[a,b]=sg[j];pts.push(key(a)===key(e)?b:a)}pts.reverse()}
+    out.push(pts)}return out};
+  const ps=Math.max(.5,+$('ps').value||3),dB=p=>B.map((a,i)=>segD(p,a,B[(i+1)%B.length])),dT=p=>Math.hypot(p[0]-TGT[0],p[1]-TGT[1]),cmp=['N','NE','E','SE','S','SO','O','NO'];
+  let idn=0;SS=[];
+  SL.forEach((L,q)=>{const pls=chain(segsAt(L)).map(pts=>({pts,len:pts.reduce((t,p,i)=>i?t+Math.hypot(p[0]-pts[i-1][0],p[1]-pts[i-1][1]):0,0)})).filter(o=>o.len>cs*3).sort((a,b)=>b.len-a.len);
+   for(const o of pls){o.L=L;o.q=q;o.id=++idn;SS.push(o)}});
+  const nearD=(o,list)=>{if(!list.length)return null;let t=0;for(const p of o.pts){let m=1e9;for(const u of list)for(const v of u.pts){const d=Math.hypot(p[0]-v[0],p[1]-v[1]);if(d<m)m=d}t+=m}return t/o.pts.length};
+  let tl=0,tp=0;
+  for(const o of SS){const P0=o.pts,e0=P0[0],e1=P0[P0.length-1],closed=Math.hypot(e0[0]-e1[0],e0[1]-e1[1])<cs*1.5;
+   let oi=0,md=1e9;P0.forEach((p,i)=>{const d=dT(p);if(d<md){md=d;oi=i}});
+   let si=dT(e0)>=dT(e1)?0:P0.length-1;
+   if(closed){let xd=-1;P0.forEach((p,i)=>{const d=dT(p);if(d>xd){xd=d;si=i}})}
+   o.oi=oi;o.si=si;o.pS=P0[si];o.pO=P0[oi];
+   const az=(Math.atan2(o.pO[0]-o.pS[0],o.pO[1]-o.pS[1])*180/Math.PI+360)%360;o.az=az;o.dir=cmp[Math.round(az/45)%8];
+   o.dS=dB(o.pS);o.dO=dB(o.pO);o.dM=B.map((_,i)=>Math.min(...P0.map(p=>segD(p,B[i],B[(i+1)%B.length]))));
+   o.dT=md;o.plants=Math.floor(o.len/ps)+1;tl+=o.len;tp+=o.plants;
+   o.up=nearD(o,SS.filter(u=>u.q===o.q-1));o.dn=nearD(o,SS.filter(u=>u.q===o.q+1));
+   let ma=1;for(const p of P0){const ci=Math.round((p[0]-minX)/cs),cj=Math.round((p[1]-minY)/cs);for(let a=-1;a<=1;a++)for(let b=-1;b<=1;b++){const ii=ci+a,jj=cj+b;if(ii<0||jj<0||ii>=nx||jj>=ny)continue;const k2=jj*nx+ii;if(sid[k2]===o.q&&acc1[k2]>ma)ma=acc1[k2]}}
+   o.area=ma*cs*cs;o.cS=inv(o.pS[0],o.pS[1]);o.cO=inv(o.pO[0],o.pO[1])}
   rep+=`<br>Franjas: <b>${SS.length}</b> · desnivel entre franjas <b>${vi.toFixed(1)} m</b> (≈ <b>${(vi/(ms/100)).toFixed(0)} m</b> horizontales a pendiente media) · ancho <b>${$('sw').value} m</b>`;
-  rep+='<br><small>'+SS.map((o,i)=>`F${i+1}: cota ${o.L.toFixed(1)} m · largo ${o.len.toFixed(0)} m · caída ${(o.len*0.01).toFixed(2)} m`).join('<br>')+'</small>';
+  rep+=`<br>Longitud total: <b>${tl.toFixed(0)} m</b> · plantas estimadas (cada ${ps} m): <b>${tp}</b>`;
   rep+='<br><small>Cómo construirlas: cada franja sigue su cota con 0.5–1% de pendiente longitudinal hacia las flechas naranjas (caída = largo × 1%) y descarga en el círculo naranja. Zanja o barrera viva aguas arriba, siembra en el lado bajo.</small>'}
  else if($('k6').checked)rep+='<br><small>Elige el destino para generar las franjas.</small>';
  // lienzo
@@ -191,14 +214,23 @@ function draw(){
    if(major&&ok.length>8){const[a,b]=ok[ok.length>>1],tx=X((a[0]+b[0])/2),ty=Y((a[1]+b[1])/2);
     ctx.font='bold 11px sans-serif';ctx.lineWidth=3;ctx.strokeStyle='rgba(255,255,255,.85)';ctx.strokeText(L,tx,ty);ctx.fillStyle='#4a2308';ctx.fillText(L,tx,ty)}}}
  if(useS){
-  ctx.lineCap='round';ctx.strokeStyle='rgba(255,140,0,.6)';ctx.lineWidth=Math.max(3,$('sw').value*s);
-  ctx.beginPath();for(const o of SS)for(const[a,b]of o.sg){ctx.moveTo(X(a[0]),Y(a[1]));ctx.lineTo(X(b[0]),Y(b[1]))}ctx.stroke();
-  ctx.strokeStyle='#b34700';ctx.fillStyle='#b34700';ctx.lineWidth=1.6;
-  for(const k of order){const q=sid[k],d=sdir[k];if(q<0||d<0)continue;const i=k%nx,j=(k-i)/nx,cx=X(minX+i*cs),cy=Y(minY+j*cs);
-   if(sid[d]===q){if((i*3+j*5)%8)continue;const ang=Math.atan2(Y(minY+Math.floor(d/nx)*cs)-cy,X(minX+(d%nx)*cs)-cx),x2=cx+Math.cos(ang)*6,y2=cy+Math.sin(ang)*6;
-    ctx.beginPath();ctx.moveTo(cx-Math.cos(ang)*6,cy-Math.sin(ang)*6);ctx.lineTo(x2,y2);ctx.stroke();
-    ctx.beginPath();ctx.moveTo(x2+Math.cos(ang)*3,y2+Math.sin(ang)*3);ctx.lineTo(x2-Math.cos(ang-.6)*4,y2-Math.sin(ang-.6)*4);ctx.lineTo(x2-Math.cos(ang+.6)*4,y2-Math.sin(ang+.6)*4);ctx.fill()}
-   else{ctx.beginPath();ctx.arc(cx,cy,5,0,7);ctx.stroke()}}}
+  ctx.lineCap='round';ctx.lineJoin='round';
+  const path=o=>{ctx.beginPath();o.pts.forEach((p,i)=>i?ctx.lineTo(X(p[0]),Y(p[1])):ctx.moveTo(X(p[0]),Y(p[1])));ctx.stroke()};
+  const lw=Math.max(3,$('sw').value*s);
+  ctx.strokeStyle='rgba(255,140,0,.6)';ctx.lineWidth=lw;SS.forEach(path);
+  const so=SS.find(o=>o.id===SEL);
+  if(so){ctx.strokeStyle='rgba(20,20,20,.9)';ctx.lineWidth=lw+5;path(so);ctx.strokeStyle='#ffd400';ctx.lineWidth=lw+1;path(so)}
+  for(const o of SS){const sel=o.id===SEL;ctx.fillStyle=ctx.strokeStyle=sel?'#000':'#8a3b00';ctx.lineWidth=1.8;let ac2=0;
+   for(let t=0;t<o.pts.length-1;t++){const a=o.pts[t],b=o.pts[t+1],x1=X(a[0]),y1=Y(a[1]),x2=X(b[0]),y2=Y(b[1]);ac2+=Math.hypot(x2-x1,y2-y1);if(ac2<38)continue;ac2=0;
+    let ang=Math.atan2(y2-y1,x2-x1);if(t>=o.oi)ang+=Math.PI;const cx=(x1+x2)/2,cy=(y1+y2)/2,c=Math.cos(ang),n=Math.sin(ang);
+    ctx.beginPath();ctx.moveTo(cx-c*5,cy-n*5);ctx.lineTo(cx+c*5,cy+n*5);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(cx+c*9,cy+n*9);ctx.lineTo(cx+c*2-n*4,cy+n*2+c*4);ctx.lineTo(cx+c*2+n*4,cy+n*2-c*4);ctx.fill()}
+   ctx.lineWidth=2;ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(X(o.pS[0]),Y(o.pS[1]),3.5,0,7);ctx.fill();ctx.stroke();
+   ctx.beginPath();ctx.arc(X(o.pO[0]),Y(o.pO[1]),7,0,7);ctx.stroke()}
+  ctx.font='bold 11px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+  for(const o of SS){let h=o.len/2,t=0,p=o.pts[0];for(let i=1;i<o.pts.length;i++){const d=Math.hypot(o.pts[i][0]-o.pts[i-1][0],o.pts[i][1]-o.pts[i-1][1]);if(t+d>=h){p=o.pts[i];break}t+=d}
+   const sel=o.id===SEL;ctx.fillStyle=sel?'#1565d8':'#b34700';ctx.beginPath();ctx.arc(X(p[0]),Y(p[1]),sel?11:9,0,7);ctx.fill();ctx.strokeStyle='#fff';ctx.lineWidth=1.5;ctx.stroke();ctx.fillStyle='#fff';ctx.fillText(o.id,X(p[0]),Y(p[1]))}
+  ctx.textAlign='start';ctx.textBaseline='alphabetic'}
  // cauces
  const th=+$('th').value,C=k=>[X(minX+(k%nx)*cs),Y(minY+Math.floor(k/nx)*cs)];
  if($('k2').checked){ctx.strokeStyle='#1565d8';ctx.lineCap='round';
@@ -218,17 +250,32 @@ function draw(){
  let ar=0;for(let i=0,j=B.length-1;i<B.length;j=i++)ar+=B[j][0]*B[i][1]-B[i][0]*B[j][1];ar=Math.abs(ar)/2;
  let ss=0,cnt=0,st30=0;for(const k of order){ss+=slope[k];cnt++;if(slope[k]>30)st30++}
  $('st').innerHTML=`Área: <b>${(ar/10000).toFixed(2)} ha</b> · Elevación: <b>${zmin.toFixed(0)}–${zmax.toFixed(0)} m</b> · ${nl} curvas · Pendiente media: <b>${(ss/cnt).toFixed(1)}%</b> · Superficie con pendiente &gt;30%: <b>${(100*st30/cnt).toFixed(0)}%</b><br><small>Tip: planta en hileras sobre las curvas; usa zanjas de infiltración y barreras donde los cauces (azul) concentran el flujo.</small>`;
- $('st').innerHTML+=rep;G={minX,minY,cs,nx,ny,Z,acc,mask,slope,s,pad,hc};
+ $('st').innerHTML+=rep;G={minX,minY,cs,nx,ny,Z,acc,mask,slope,s,pad,hc,SS,B};panel(SS,B);
 }
 $('cv').addEventListener('mousemove',e=>{if(!G)return;const r=$('cv').getBoundingClientRect(),f=$('cv').width/r.width;
  const px=(e.clientX-r.left)*f,py=(e.clientY-r.top)*f,x=G.minX+(px-G.pad)/G.s,y=G.minY+(G.hc-G.pad-py)/G.s,i=Math.round((x-G.minX)/G.cs),j=Math.round((y-G.minY)/G.cs);
  if(i<0||j<0||i>=G.nx||j>=G.ny||!G.mask[j*G.nx+i]){$('hv').textContent='';return}
  const k=j*G.nx+i;$('hv').innerHTML=`Elevación <b>${G.Z[k].toFixed(1)} m</b> · Pendiente <b>${G.slope[k].toFixed(0)}%</b> · Área aportante <b>${(G.acc[k]*G.cs*G.cs).toFixed(0)} m²</b>`});
+function segD(p,a,b){const dx=b[0]-a[0],dy=b[1]-a[1],t=Math.max(0,Math.min(1,((p[0]-a[0])*dx+(p[1]-a[1])*dy)/(dx*dx+dy*dy||1)));return Math.hypot(p[0]-a[0]-t*dx,p[1]-a[1]-t*dy)}
+function selS(id){SEL=id===SEL?0:id;draw()}
+function panel(SS,B){const sl=$('sl'),sd=$('sd');
+ if(!SS.length){sl.innerHTML='';sd.innerHTML='';return}
+ if(!SS.some(o=>o.id===SEL))SEL=0;
+ sl.innerHTML='<table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:8px"><tr style="text-align:left;color:var(--mu)"><th>#</th><th>Cota</th><th>Largo</th><th>Plantas</th><th>Rumbo</th><th>Área aporte</th></tr>'+SS.map(o=>`<tr onclick="selS(${o.id})" style="cursor:pointer;border-top:1px solid var(--bd);${o.id===SEL?'background:rgba(255,212,0,.35);font-weight:700':''}"><td>F${o.id}</td><td>${o.L.toFixed(1)} m</td><td>${o.len.toFixed(0)} m</td><td>${o.plants}</td><td>${o.dir}</td><td>${(o.area/10000).toFixed(2)} ha</td></tr>`).join('')+'</table>';
+ const o=SS.find(u=>u.id===SEL);
+ if(!o){sd.innerHTML='<small>Haz clic en una franja del mapa (o en la tabla) para ver su detalle.</small>';return}
+ const f=v=>v<1.5*G.cs?'≈0 (toca)':v.toFixed(0)+' m',n=B.length;
+ sd.innerHTML=`<div style="border:1px solid var(--bd);border-radius:8px;padding:8px;margin-top:8px;font-size:13px;line-height:1.55"><b>Franja F${o.id}</b> · cota ${o.L.toFixed(1)} m · largo <b>${o.len.toFixed(0)} m</b> · ancho ${$('sw').value} m<br>
+Inicio (○): ${o.cS}<br>Salida (◯): ${o.cO} · rumbo <b>${o.dir}</b> (${o.az.toFixed(0)}°)<br>
+Caída recomendada (0.5–1%): <b>${(o.len*0.005).toFixed(2)}–${(o.len*0.01).toFixed(2)} m</b> → cota de salida ≈ ${(o.L-o.len*0.01).toFixed(2)} m<br>
+Salida → destino: <b>${o.dT.toFixed(0)} m</b> · Área que le drena: <b>${(o.area/10000).toFixed(2)} ha</b> · Plantas: <b>${o.plants}</b> (cada ${$('ps').value} m)<br>
+Separación media a la franja de arriba: <b>${o.up==null?'—':o.up.toFixed(0)+' m'}</b> · a la de abajo: <b>${o.dn==null?'—':o.dn.toFixed(0)+' m'}</b>
+<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:6px"><tr style="text-align:left;color:var(--mu)"><th>Lado del contorno</th><th>Desde inicio</th><th>Desde salida</th><th>Mínima franja</th></tr>`+B.map((_,i)=>`<tr style="border-top:1px solid var(--bd)"><td>Lado ${i+1} (V${i+1}–V${(i+1)%n+1})</td><td>${f(o.dS[i])}</td><td>${f(o.dO[i])}</td><td>${f(o.dM[i])}</td></tr>`).join('')+'</table></div></div>'}
 function pickT(){pickMode=!pickMode;$('cv').style.cursor=pickMode?'crosshair':'';$('bt').classList.toggle('on',pickMode);$('ti').textContent=pickMode?'Haz clic en el mapa de abajo, en el punto donde quieres llevar el agua.':''}
-$('cv').addEventListener('click',e=>{if(!pickMode||!G)return;const r=$('cv').getBoundingClientRect(),f=$('cv').width/r.width;
+$('cv').addEventListener('click',e=>{if(!G)return;const r=$('cv').getBoundingClientRect(),f=$('cv').width/r.width;if(!pickMode){const x=G.minX+((e.clientX-r.left)*f-G.pad)/G.s,y=G.minY+(G.hc-G.pad-(e.clientY-r.top)*f)/G.s;let best=0,bd=1e9;for(const o of G.SS||[])for(let i=0;i<o.pts.length-1;i++){const d=segD([x,y],o.pts[i],o.pts[i+1]);if(d<bd){bd=d;best=o.id}}if(best&&bd<=14/G.s+(+$('sw').value)/2){SEL=best===SEL?0:best;draw()}return}
  TGT=[G.minX+((e.clientX-r.left)*f-G.pad)/G.s,G.minY+(G.hc-G.pad-(e.clientY-r.top)*f)/G.s];
  pickMode=false;$('cv').style.cursor='';$('bt').classList.remove('on');$('k6').checked=true;$('ti').textContent='Destino fijado. Ajusta separación, ancho o radio.';draw()});
-['th','iv','rs','k1','k2','k3','k4','k5','k6','k7','sm','sv','sw','rd'].forEach(id=>$(id).addEventListener('input',()=>{$('thv').textContent=$('th').value;if(G)draw()}));
+['th','iv','rs','k1','k2','k3','k4','k5','k6','k7','sm','sv','sw','rd','ps'].forEach(id=>$(id).addEventListener('input',()=>{$('thv').textContent=$('th').value;if(G)draw()}));
 ex();
 </script><script>
 const M=L.map('map').setView([23.6,-102.5],5);
