@@ -477,8 +477,8 @@ function open2(){
  if(!G){$('m2m').textContent='Primero genera el análisis del Módulo 1 (pulsa “Dibujar” o “Obtener alturas y dibujar”). Aquí se usa su flujo de agua.';return}
  $('m2m').textContent='';renderEv();setM2(mode2);calcAll();renderProps();run2()}
 function setM2(m){mode2=m;$('mp').classList.toggle('on',m==='dam');$('mj').classList.toggle('on',m==='pond');$('mq').classList.toggle('on',m==='sel');
- $('m2i').textContent=m==='dam'?'Haz clic sobre un cauce azul del mapa para colocar la presa/bordo.':'m'==='pond'?'Haz clic donde quieras el jagüey (excavado).':'Haz clic y arrastra sobre la figura para moverla o rotarla.';
- cv2.style.cursor=m==='sel'?'default':'crosshair';}
+ $('m2i').textContent=m==='dam'?'Haz clic sobre un cauce azul del mapa para colocar la presa/bordo.':m==='pond'?'Haz clic donde quieras el jagüey (excavado).':'Haz clic y arrastra sobre la figura para moverla o rotarla.';
+ const c2=$('cv2'); if(c2) c2.style.cursor=m==='sel'?'default':'crosshair';}
 function renderEv(){$('evl').innerHTML='<div class="r" style="font-size:11px;color:var(--mu)"><span>Día</span><span>Lluvia (mm)</span><span>Horas</span><span style="flex:0 0 36px"></span></div>'+EV.map((e,i)=>`<div class="r" style="margin-bottom:4px"><input type="number" value="${e.d}" min="1" onchange="EV[${i}].d=+this.value;run2()"><input type="number" value="${e.mm}" min="0" onchange="EV[${i}].mm=+this.value;run2()"><input type="number" value="${e.h}" min="0.1" step="0.5" onchange="EV[${i}].h=+this.value;run2()"><button class="s" style="margin:0;flex:0 0 36px;padding:4px" onclick="EV.splice(${i},1);renderEv();run2()">✕</button></div>`).join('')}
 function addEv(){EV.push({d:EV.length?EV[EV.length-1].d+3:1,mm:30,h:3});renderEv();run2()}
 function ups(k){if(!G.rev){G.rev=[];for(let q=0;q<G.dir.length;q++){const d=G.dir[q];if(G.mask[q]&&d>=0)(G.rev[d]||(G.rev[d]=[])).push(q)}}
@@ -508,7 +508,7 @@ function calcAll(){
  for(const o of ST2){const inU=ST2.filter(u=>u!==o&&o.mk[u.k]);
   o.ups=inU.filter(u=>!inU.some(m=>m!==u&&m.mk[u.k]));o.Aex=Math.max(0,o.Atot-o.ups.reduce((t,u)=>t+u.Atot,0))}}
 function sim(){
- const D=Math.max(1,Math.min(365,Math.round(+$('nd').value\vert{}\vert{}30))),C=+$('cr').value,Ia=+$('ia').value\vert{}\vert{}0,E=+$('evp').value||0,Sp=+$('inf').value\vert{}\vert{}0,hh=Math.max(.05,+$('wh').value||.3);
+ const D=Math.max(1,Math.min(365,Math.round(+$('nd').value || 30))),C=+$('cr').value,Ia=+$('ia').value || 0,E=+$('evp').value||0,Sp=+$('inf').value || 0,hh=Math.max(.05,+$('wh').value||.3);
  const rain=new Array(D+1).fill(0),hrs=new Array(D+1).fill(0);
  for(const e of EV){const d=Math.round(e.d);if(d>=1&&d<=D&&e.mm>0){rain[d]+=e.mm;hrs[d]=Math.max(hrs[d],e.h||1)}}
  const areaAt=(o,V)=>{if(V<=0)return 0;for(let q=1;q<o.Vt.length;q++)if(V<=o.Vt[q]){const f=(V-o.Vt[q-1])/((o.Vt[q]-o.Vt[q-1])||1);return o.At[q-1]+f*(o.At[q]-o.At[q-1])}return o.Afull};
