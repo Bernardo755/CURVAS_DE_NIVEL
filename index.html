@@ -25,7 +25,7 @@ button.s{background:transparent;color:var(--fg);border:1px solid var(--bd)}
 .cv{overflow-x:auto}
 canvas{max-width:100%;height:auto;border-radius:8px;border:1px solid var(--bd);display:block}
 #st{font-size:13px;color:var(--mu);margin-top:8px}
-#hv{font-size:13px;min-height:20px;margin-top:6px}
+#hv,#hv2{font-size:13px;min-height:20px;margin-top:6px}
 .ms{color:#c0392b;font-size:13px}
 small{color:var(--mu)}.tb{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px}.tb button{margin:0}.tb input{width:80px}button.on{outline:3px solid #f1c40f}#map,#map2{height:440px;border-radius:8px;border:1px solid var(--bd)}
 #map2{display:none;height:560px;margin-top:6px}.leaflet-tooltip.tl{background:rgba(0,0,0,.78);color:#fff;border:0;font:600 11px sans-serif;padding:2px 6px;box-shadow:none}.leaflet-tooltip.tl:before{display:none}.tabs{display:flex;gap:6px;margin:6px 0 12px}.tabs button{margin:0;background:transparent;color:var(--fg);border:1px solid var(--bd)}.tabs button.on{background:var(--ac);color:#fff;outline:none}table input,.c table td{font-size:12px}</style><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"><script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script></head><body><div class="w">
@@ -77,7 +77,13 @@ small{color:var(--mu)}.tb{display:flex;flex-wrap:wrap;gap:8px;align-items:center
 <div class="r"><button onclick="draw()">Dibujar</button><button class="s" onclick="ex()">Ejemplo</button></div>
 <div class="ms" id="ms"></div>
 </div>
-<div class="c"><div class="tb"><button class="s" id="bv" onclick="togView()" style="margin:0 0 8px">🗺️ Ver sobre mapa real</button></div><div class="cv" id="cvw"><canvas id="cv" width="900" height="600"></canvas></div><div id="map2"></div>
+<div class="c">
+<div class="tb">
+<button class="s" id="bv" onclick="togView()" style="margin:0 0 8px">🗺️ Ver sobre mapa real</button>
+<button class="s" id="bm" onclick="toggleMeasure()" style="margin:0 0 8px">📏 Medir distancia</button>
+<button class="s" onclick="clearMeasure()" style="margin:0 0 8px">Limpiar medidas</button>
+</div>
+<div class="cv" id="cvw"><canvas id="cv" width="900" height="600"></canvas></div><div id="map2"></div>
 <div id="hv">Pasa el cursor sobre el mapa para ver elevación, pendiente y acumulación de agua.</div>
 <div id="st"></div><div id="sd"></div><div id="sl"></div></div>
 </div></div>
@@ -105,6 +111,24 @@ window.addEventListener('error',e=>{const b=document.getElementById('err');if(b)
 const $=id=>document.getElementById(id);
 const EXB="0,0\n400,0\n420,200\n350,320\n150,300\n0,220";
 const EXP="0,0,1520\n200,0,1505\n400,0,1495\n420,200,1530\n350,320,1565\n150,300,1550\n0,220,1535\n200,150,1510\n100,100,1515\n300,100,1500\n250,250,1545\n80,230,1540";
+
+let measureMode=false,measureStart=null,measureCurrent=null,measurements=[];
+
+function toggleMeasure(){
+ measureMode=!measureMode;
+ $('bm').classList.toggle('on',measureMode);
+ if(!measureMode){measureStart=null;measureCurrent=null}
+ $('cv').style.cursor=measureMode?'crosshair':(pickMode?'crosshair':'');
+ $('hv').textContent=measureMode?'Haz clic en el plano para fijar el primer punto de medición.':'Pasa el cursor sobre el mapa para ver elevación, pendiente y acumulación de agua.';
+ if(G)draw();
+}
+
+function clearMeasure(){
+ measurements=[];measureStart=null;measureCurrent=null;
+ $('hv').textContent='Medidas borradas.';
+ if(G)draw();
+}
+
 function showTab(t){
  $('m1').style.display=t===1?'block':'none';$('m2').style.display=t===2?'block':'none';
  $('t1').classList.toggle('on',t===1);$('t2').classList.toggle('on',t===2);window.scrollTo(0,0);
@@ -275,6 +299,31 @@ function draw(){
  ctx.strokeStyle='#1f4d27';ctx.lineWidth=2.5;ctx.setLineDash([8,4]);ctx.beginPath();B.forEach((a,i)=>i?ctx.lineTo(X(a[0]),Y(a[1])):ctx.moveTo(X(a[0]),Y(a[1])));ctx.closePath();ctx.stroke();ctx.setLineDash([]);
  if($('k5').checked){ctx.font='10px sans-serif';for(const p of P){ctx.fillStyle='#c0392b';ctx.beginPath();ctx.arc(X(p[0]),Y(p[1]),3,0,7);ctx.fill();ctx.fillStyle='#222';ctx.fillText(p[2],X(p[0])+5,Y(p[1])-4)}}
  if(TGT){const tx=X(TGT[0]),ty=Y(TGT[1]),rr=Math.max(+$('rd').value||15,cs*1.5)*s;ctx.setLineDash([5,4]);ctx.strokeStyle='#7b1fa2';ctx.lineWidth=2;ctx.beginPath();ctx.arc(tx,ty,rr,0,7);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle='#7b1fa2';ctx.beginPath();ctx.arc(tx,ty,5,0,7);ctx.fill();ctx.font='bold 12px sans-serif';ctx.fillText('Destino',tx+8,ty-8)}
+
+ // Dibujar mediciones realizadas en Pestaña 1
+ measurements.forEach(m=>{
+  const x1=X(m.p1[0]),y1=Y(m.p1[1]),x2=X(m.p2[0]),y2=Y(m.p2[1]);
+  ctx.strokeStyle='#e67e22';ctx.lineWidth=2.5;ctx.setLineDash([6,3]);
+  ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();ctx.setLineDash([]);
+  ctx.fillStyle='#e67e22';ctx.beginPath();ctx.arc(x1,y1,4,0,7);ctx.fill();ctx.beginPath();ctx.arc(x2,y2,4,0,7);ctx.fill();
+  const mx=(x1+x2)/2,my=(y1+y2)/2;ctx.font='bold 12px sans-serif';const txt=m.dist.toFixed(1)+' m';
+  const tw=ctx.measureText(txt).width;ctx.fillStyle='rgba(255,255,255,0.88)';ctx.fillRect(mx-tw/2-4,my-9,tw+8,18);
+  ctx.strokeStyle='#d35400';ctx.lineWidth=1;ctx.strokeRect(mx-tw/2-4,my-9,tw+8,18);
+  ctx.fillStyle='#d35400';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(txt,mx,my);ctx.textAlign='start';ctx.textBaseline='alphabetic';
+ });
+
+ if(measureMode&&measureStart&&measureCurrent){
+  const x1=X(measureStart[0]),y1=Y(measureStart[1]),x2=X(measureCurrent[0]),y2=Y(measureCurrent[1]);
+  const d=Math.hypot(measureCurrent[0]-measureStart[0],measureCurrent[1]-measureStart[1]);
+  ctx.strokeStyle='#e74c3c';ctx.lineWidth=2;ctx.setLineDash([4,4]);
+  ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();ctx.setLineDash([]);
+  ctx.fillStyle='#e74c3c';ctx.beginPath();ctx.arc(x1,y1,5,0,7);ctx.fill();ctx.beginPath();ctx.arc(x2,y2,5,0,7);ctx.fill();
+  const mx=(x1+x2)/2,my=(y1+y2)/2;ctx.font='bold 12px sans-serif';const txt=d.toFixed(1)+' m';
+  const tw=ctx.measureText(txt).width;ctx.fillStyle='rgba(255,255,255,0.9)';ctx.fillRect(mx-tw/2-4,my-9,tw+8,18);
+  ctx.strokeStyle='#c0392b';ctx.lineWidth=1;ctx.strokeRect(mx-tw/2-4,my-9,tw+8,18);
+  ctx.fillStyle='#c0392b';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(txt,mx,my);ctx.textAlign='start';ctx.textBaseline='alphabetic';
+ }
+
  // estadísticas
  let ar=0;for(let i=0,j=B.length-1;i<B.length;j=i++)ar+=B[j][0]*B[i][1]-B[i][0]*B[j][1];ar=Math.abs(ar)/2;
  let ss=0,cnt=0,st30=0;for(const k of order){ss+=slope[k];cnt++;if(slope[k]>30)st30++}
@@ -284,6 +333,12 @@ function draw(){
 }
 $('cv').addEventListener('mousemove',e=>{if(!G)return;const r=$('cv').getBoundingClientRect(),f=$('cv').width/r.width;
  const px=(e.clientX-r.left)*f,py=(e.clientY-r.top)*f,x=G.minX+(px-G.pad)/G.s,y=G.minY+(G.hc-G.pad-py)/G.s,i=Math.round((x-G.minX)/G.cs),j=Math.round((y-G.minY)/G.cs);
+ if(measureMode&&measureStart){
+  measureCurrent=[x,y];
+  const d=Math.hypot(x-measureStart[0],y-measureStart[1]);
+  $('hv').innerHTML=`<b>Medición en curso:</b> ${d.toFixed(1)} m · Haz clic para fijar el segundo punto.`;
+  draw();return;
+ }
  if(i<0||j<0||i>=G.nx||j>=G.ny||!G.mask[j*G.nx+i]){$('hv').textContent='';return}
  const k=j*G.nx+i;$('hv').innerHTML=`Elevación <b>${G.Z[k].toFixed(1)} m</b> · Pendiente <b>${G.slope[k].toFixed(0)}%</b> · Área aportante <b>${(G.acc[k]*G.cs*G.cs).toFixed(0)} m²</b>`});
 function segD(p,a,b){const dx=b[0]-a[0],dy=b[1]-a[1],t=Math.max(0,Math.min(1,((p[0]-a[0])*dx+(p[1]-a[1])*dy)/(dx*dx+dy*dy||1)));return Math.hypot(p[0]-a[0]-t*dx,p[1]-a[1]-t*dy)}
@@ -315,8 +370,23 @@ Salida → destino: <b>${o.dT.toFixed(0)} m</b> · Área que le drena: <b>${(o.a
 Separación media a la franja de arriba: <b>${o.up==null?'—':o.up.toFixed(0)+' m'}</b> · a la de abajo: <b>${o.dn==null?'—':o.dn.toFixed(0)+' m'}</b>
 <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:6px"><tr style="text-align:left;color:var(--mu)"><th>Lado del contorno</th><th>Desde inicio</th><th>Desde salida</th><th>Mínima franja</th></tr>`+B.map((_,i)=>`<tr style="border-top:1px solid var(--bd)"><td>Lado ${i+1} (V${i+1}–V${(i+1)%n+1})</td><td>${f(o.dS[i])}</td><td>${f(o.dO[i])}</td><td>${f(o.dM[i])}</td></tr>`).join('')+'</table></div>'+ctHTML(o,B)+'<button class="s" onclick="showMap()" style="margin-top:8px">🗺️ Ver sobre el mapa real</button></div>'}
 function pickT(){pickMode=!pickMode;$('cv').style.cursor=pickMode?'crosshair':'';$('bt').classList.toggle('on',pickMode);$('ti').textContent=pickMode?'Haz clic en el mapa de abajo, en el punto donde quieres llevar el agua.':''}
-$('cv').addEventListener('click',e=>{if(!G)return;const r=$('cv').getBoundingClientRect(),f=$('cv').width/r.width;if(!pickMode){const x=G.minX+((e.clientX-r.left)*f-G.pad)/G.s,y=G.minY+(G.hc-G.pad-(e.clientY-r.top)*f)/G.s;let best=0,bd=1e9;for(const o of G.SS||[])for(let i=0;i<o.pts.length-1;i++){const d=segD([x,y],o.pts[i],o.pts[i+1]);if(d<bd){bd=d;best=o.id}}if(best&&bd<=14/G.s+(+$('sw').value)/2){SEL=best===SEL?0:best;draw()}return}
- TGT=[G.minX+((e.clientX-r.left)*f-G.pad)/G.s,G.minY+(G.hc-G.pad-(e.clientY-r.top)*f)/G.s];
+$('cv').addEventListener('click',e=>{if(!G)return;const r=$('cv').getBoundingClientRect(),f=$('cv').width/r.width;
+ const px=(e.clientX-r.left)*f,py=(e.clientY-r.top)*f,x=G.minX+(px-G.pad)/G.s,y=G.minY+(G.hc-G.pad-py)/G.s;
+ if(measureMode){
+  if(!measureStart){
+   measureStart=[x,y];
+   $('hv').innerHTML='<b>Primer punto fijado.</b> Haz clic en el segundo punto (curva, orilla o destino) para medir.';
+  }else{
+   const d=Math.hypot(x-measureStart[0],y-measureStart[1]);
+   measurements.push({p1:measureStart,p2:[x,y],dist:d});
+   measureStart=null;measureCurrent=null;
+   $('hv').innerHTML=`<b>Distancia medida: ${d.toFixed(1)} m.</b> Haz clic para hacer otra medición o 'Medir distancia' para salir.`;
+   draw();
+  }
+  return;
+ }
+ if(!pickMode){let best=0,bd=1e9;for(const o of G.SS||[])for(let i=0;i<o.pts.length-1;i++){const d=segD([x,y],o.pts[i],o.pts[i+1]);if(d<bd){bd=d;best=o.id}}if(best&&bd<=14/G.s+(+$('sw').value)/2){SEL=best===SEL?0:best;draw()}return}
+ TGT=[x,y];
  pickMode=false;$('cv').style.cursor='';$('bt').classList.remove('on');$('k6').checked=true;$('ti').textContent='Destino fijado. Ajusta separación, ancho o radio.';draw()});
 ['th','iv','rs','k1','k2','k3','k4','k5','k6','k7','sm','sv','sw','rd','ps'].forEach(id=>$(id).addEventListener('input',()=>{$('thv').textContent=$('th').value;if(G)draw()}));
 ex();
@@ -398,14 +468,17 @@ function ovDraw(){
 </script>
 <script>
 let ST2=[],SEL2=0,mode2='sel',NID=0,PN=0,JN=0,EV=[{d:2,mm:45,h:3},{d:6,mm:70,h:2},{d:12,mm:30,h:4}];
+let isDragging2=false,isRotating2=false,draggedObj2=null;
 const COL=['#1565d8','#e53935','#43a047','#8e24aa','#fb8c00','#00897b','#6d4c41','#d81b60'],fm=v=>Math.round(v).toLocaleString('es-MX'),f1=v=>v.toFixed(1);
-const cellOf=(x,y)=>{const i=Math.round((x-G.minX)/G.cs),j=Math.round((y-G.minY)/G.cs);return i<0||j<0||i>=G.nx||j>=G.ny?-1:j*G.nx+i};
+const cellOf=(x,y)=>{if(!G)return -1;const i=Math.round((x-G.minX)/G.cs),j=Math.round((y-G.minY)/G.cs);return i<0||j<0||i>=G.nx||j>=G.ny?-1:j*G.nx+i};
 const wx=k=>G.minX+(k%G.nx)*G.cs,wy=k=>G.minY+Math.floor(k/G.nx)*G.cs,X2=x=>G.pad+(x-G.minX)*G.s,Y2=y=>G.hc-G.pad-(y-G.minY)*G.s;
+
 function open2(){
  if(!G){$('m2m').textContent='Primero genera el análisis del Módulo 1 (pulsa “Dibujar” o “Obtener alturas y dibujar”). Aquí se usa su flujo de agua.';return}
  $('m2m').textContent='';renderEv();setM2(mode2);calcAll();renderProps();run2()}
 function setM2(m){mode2=m;$('mp').classList.toggle('on',m==='dam');$('mj').classList.toggle('on',m==='pond');$('mq').classList.toggle('on',m==='sel');
- $('m2i').textContent=m==='dam'?'Haz clic sobre un cauce azul del mapa: se crea una presa/bordo y se calcula el embalse que se forma aguas arriba.':m==='pond'?'Haz clic donde quieras el jagüey (excavado). Se orienta siguiendo la curva de nivel.':'Haz clic en una estructura para editarla.'}
+ $('m2i').textContent=m==='dam'?'Haz clic sobre un cauce azul del mapa para colocar la presa/bordo.':'m'==='pond'?'Haz clic donde quieras el jagüey (excavado).':'Haz clic y arrastra sobre la figura para moverla o rotarla.';
+ cv2.style.cursor=m==='sel'?'default':'crosshair';}
 function renderEv(){$('evl').innerHTML='<div class="r" style="font-size:11px;color:var(--mu)"><span>Día</span><span>Lluvia (mm)</span><span>Horas</span><span style="flex:0 0 36px"></span></div>'+EV.map((e,i)=>`<div class="r" style="margin-bottom:4px"><input type="number" value="${e.d}" min="1" onchange="EV[${i}].d=+this.value;run2()"><input type="number" value="${e.mm}" min="0" onchange="EV[${i}].mm=+this.value;run2()"><input type="number" value="${e.h}" min="0.1" step="0.5" onchange="EV[${i}].h=+this.value;run2()"><button class="s" style="margin:0;flex:0 0 36px;padding:4px" onclick="EV.splice(${i},1);renderEv();run2()">✕</button></div>`).join('')}
 function addEv(){EV.push({d:EV.length?EV[EV.length-1].d+3:1,mm:30,h:3});renderEv();run2()}
 function ups(k){if(!G.rev){G.rev=[];for(let q=0;q<G.dir.length;q++){const d=G.dir[q];if(G.mask[q]&&d>=0)(G.rev[d]||(G.rev[d]=[])).push(q)}}
@@ -420,11 +493,12 @@ function calcAll(){
  for(const o of ST2){const k=o.k=cellOf(o.x,o.y);
   o.U=ups(k);o.mk=new Uint8Array(n);o.U.forEach(q=>o.mk[q]=1);o.Atot=o.U.length*cs*cs;
   const i=k%nx,j=(k-i)/nx,gx=g.Z[j*nx+Math.min(i+1,nx-1)]-g.Z[j*nx+Math.max(i-1,0)],gy=g.Z[Math.min(j+1,ny-1)*nx+i]-g.Z[Math.max(j-1,0)*nx+i];
-  o.ang=Math.atan2(-gx,-gy);o.Vt=[0];o.At=[0];const p=o.p;
+  if(o.ang===undefined)o.ang=Math.atan2(-gx,-gy);
+  o.Vt=[0];o.At=[0];const p=o.p;
   if(o.type==='dam'){const z0=g.Z[k];
    for(let q=1;q<=12;q++){const f=flood(o,z0+p.Hw*q/12);o.Vt.push(f.V);o.At.push(f.A);if(q===12)o.flood=f.cells}
-   let vx,vy;const d=g.dir[k];if(d>=0){vx=(d%nx)-i;vy=Math.floor(d/nx)-j}else{vx=-gx;vy=-gy}
-   const m=Math.hypot(vx,vy)||1,px=-vy/m,py=vx/m,crest=z0+p.Hw+p.fb;
+   let px=Math.cos(o.ang),py=Math.sin(o.ang);
+   const crest=z0+p.Hw+p.fb;
    const walk=sg=>{let t=0;for(;;){t++;const ci=Math.round(i+px*sg*t),cj=Math.round(j+py*sg*t);if(ci<0||cj<0||ci>=nx||cj>=ny)break;const c=cj*nx+ci;if(!g.mask[c]||g.Z[c]>=crest)break}return t-1};
    const n1=walk(1),n2=walk(-1);o.L=(n1+n2+1)*cs;o.w1=[i+px*n1,j+py*n1];o.w2=[i-px*n2,j-py*n2];
    const Hc=p.Hw+p.fb;o.Vemb=o.L*Hc*(p.cw+p.z*Hc)*0.7;o.Hc=Hc;
@@ -434,7 +508,7 @@ function calcAll(){
  for(const o of ST2){const inU=ST2.filter(u=>u!==o&&o.mk[u.k]);
   o.ups=inU.filter(u=>!inU.some(m=>m!==u&&m.mk[u.k]));o.Aex=Math.max(0,o.Atot-o.ups.reduce((t,u)=>t+u.Atot,0))}}
 function sim(){
- const D=Math.max(1,Math.min(365,Math.round(+$('nd').value||30))),C=+$('cr').value,Ia=+$('ia').value||0,E=+$('evp').value||0,Sp=+$('inf').value||0,hh=Math.max(.05,+$('wh').value||.3);
+ const D=Math.max(1,Math.min(365,Math.round(+$('nd').value\vert{}\vert{}30))),C=+$('cr').value,Ia=+$('ia').value\vert{}\vert{}0,E=+$('evp').value||0,Sp=+$('inf').value\vert{}\vert{}0,hh=Math.max(.05,+$('wh').value||.3);
  const rain=new Array(D+1).fill(0),hrs=new Array(D+1).fill(0);
  for(const e of EV){const d=Math.round(e.d);if(d>=1&&d<=D&&e.mm>0){rain[d]+=e.mm;hrs[d]=Math.max(hrs[d],e.h||1)}}
  const areaAt=(o,V)=>{if(V<=0)return 0;for(let q=1;q<o.Vt.length;q++)if(V<=o.Vt[q]){const f=(V-o.Vt[q-1])/((o.Vt[q]-o.Vt[q-1])||1);return o.At[q-1]+f*(o.At[q]-o.At[q-1])}return o.Afull};
@@ -448,7 +522,7 @@ function sim(){
  return{D,rain,hrs,C}}
 function run2(){
  if(!G)return;
- if(!ST2.length){draw2();$('r2').innerHTML='<small style="display:block;margin-top:8px">Aún no hay estructuras. Elige “Presa / bordo” o “Jagüey” y haz clic en el mapa, de preferencia sobre un cauce azul.</small>';$('lg').innerHTML='';$('tl2').innerHTML='';$('cv3').getContext('2d').clearRect(0,0,900,240);return}
+ if(!ST2.length){draw2();$('r2').innerHTML='<small style="display:block;margin-top:8px">Aún no hay estructuras. Elige “Presa / bordo” o “Jagüey” y haz clic en el mapa.</small>';$('lg').innerHTML='';$('tl2').innerHTML='';$('cv3').getContext('2d').clearRect(0,0,900,240);return}
  const S=sim();draw2();render2(S);chart2(S)}
 function draw2(){const g=G,c=$('cv2'),x=c.getContext('2d');c.width=g.base.width;c.height=g.base.height;x.drawImage(g.base,0,0);
  x.strokeStyle='#1e6fd9';x.lineCap='round';
@@ -457,11 +531,27 @@ function draw2(){const g=G,c=$('cv2'),x=c.getContext('2d');c.width=g.base.width;
  const px=g.cs*g.s+1,so=ST2.find(o=>o.id===SEL2);
  if(so&&$('cu').checked){x.fillStyle='rgba(255,235,59,.28)';for(const q of so.U)x.fillRect(X2(wx(q))-px/2,Y2(wy(q))-px/2,px,px)}
  ST2.forEach((o,i)=>{
-  if(o.type==='dam'){x.fillStyle='rgba(33,150,243,.65)';for(const q of o.flood)x.fillRect(X2(wx(q))-px/2,Y2(wy(q))-px/2,px,px);
-   x.strokeStyle='#4e342e';x.lineWidth=5;x.lineCap='butt';x.beginPath();x.moveTo(X2(g.minX+o.w1[0]*g.cs),Y2(g.minY+o.w1[1]*g.cs));x.lineTo(X2(g.minX+o.w2[0]*g.cs),Y2(g.minY+o.w2[1]*g.cs));x.stroke()}
-  else{x.save();x.translate(X2(o.x),Y2(o.y));x.rotate(o.ang);const L=o.p.l*g.s,W=o.p.w*g.s;x.fillStyle='rgba(33,150,243,.7)';x.strokeStyle='#0d47a1';x.lineWidth=2;x.fillRect(-L/2,-W/2,L,W);x.strokeRect(-L/2,-W/2,L,W);x.restore()}
-  const cx=X2(o.x),cy=Y2(o.y),sel=o.id===SEL2;x.beginPath();x.arc(cx,cy,sel?12:10,0,7);x.fillStyle=COL[i%8];x.fill();x.lineWidth=sel?3:1.5;x.strokeStyle=sel?'#ffd400':'#fff';x.stroke();
-  x.fillStyle='#fff';x.font='bold 10px sans-serif';x.textAlign='center';x.textBaseline='middle';x.fillText(o.name,cx,cy);x.textAlign='start';x.textBaseline='alphabetic'})}
+  const cx=X2(o.x),cy=Y2(o.y),sel=o.id===SEL2;
+  if(o.type==='dam'){
+   if(o.flood){x.fillStyle='rgba(33,150,243,.65)';for(const q of o.flood)x.fillRect(X2(wx(q))-px/2,Y2(wy(q))-px/2,px,px)}
+   if(o.w1&&o.w2){
+    x.strokeStyle=sel?'#000':'#4e342e';x.lineWidth=sel?7:5;x.lineCap='butt';
+    x.beginPath();x.moveTo(X2(g.minX+o.w1[0]*g.cs),Y2(g.minY+o.w1[1]*g.cs));x.lineTo(X2(g.minX+o.w2[0]*g.cs),Y2(g.minY+o.w2[1]*g.cs));x.stroke();
+    if(sel){x.strokeStyle='#ffd400';x.lineWidth=3;x.stroke()}
+   }
+  }else{
+   x.save();x.translate(cx,cy);x.rotate(-o.ang);const L=o.p.l*g.s,W=o.p.w*g.s;
+   x.fillStyle='rgba(33,150,243,.7)';x.strokeStyle=sel?'#ffd400':'#0d47a1';x.lineWidth=sel?3:2;
+   x.fillRect(-L/2,-W/2,L,W);x.strokeRect(-L/2,-W/2,L,W);x.restore()}
+  x.beginPath();x.arc(cx,cy,sel?12:10,0,7);x.fillStyle=COL[i%8];x.fill();x.lineWidth=sel?3:1.5;x.strokeStyle=sel?'#ffd400':'#fff';x.stroke();
+  x.fillStyle='#fff';x.font='bold 10px sans-serif';x.textAlign='center';x.textBaseline='middle';x.fillText(o.name,cx,cy);
+  if(sel){
+   const hx=cx+Math.cos(o.ang)*45,hy=cy-Math.sin(o.ang)*45;
+   x.strokeStyle='#ffd400';x.lineWidth=2;x.setLineDash([3,3]);x.beginPath();x.moveTo(cx,cy);x.lineTo(hx,hy);x.stroke();x.setLineDash([]);
+   x.beginPath();x.arc(hx,hy,8,0,7);x.fillStyle='#ff8c00';x.fill();x.strokeStyle='#fff';x.lineWidth=2;x.stroke();
+   x.fillStyle='#fff';x.font='bold 9px sans-serif';x.fillText('🔄',hx,hy);
+  }
+  x.textAlign='start';x.textBaseline='alphabetic'})}
 function render2(S){const T=k=>ST2.reduce((t,o)=>t+o[k],0),own=T('iO'),cap=T('Cap'),V=T('V'),tot=S.rain.reduce((a,b)=>a+b,0);
  const th='<tr style="text-align:left;color:var(--mu)">',td=(a)=>a.map(v=>`<td style="padding:2px 6px 2px 0">${v}</td>`).join('');
  let h=`<div style="margin-top:8px;font-size:13px;line-height:1.55"><b>Resumen (${S.D} días · ${f1(tot)} mm de lluvia · coef. ${S.C})</b><br>Capacidad total: <b>${fm(cap)} m³</b> (${fm(cap*1000)} L) · Agua captada: <b>${fm(own)} m³</b> · Almacenada al final: <b>${fm(V)} m³</b> (${(100*V/(cap||1)).toFixed(0)}% de la capacidad) · Derramada: <b>${fm(T('spT'))} m³</b> · Pérdidas (evaporación + infiltración): <b>${fm(T('loss'))} m³</b></div>`;
@@ -484,23 +574,73 @@ function chart2(S){const c=$('cv3'),x=c.getContext('2d');c.width=900;c.height=24
  x.fillStyle='rgba(100,181,246,.55)';for(let d=1;d<=D;d++)if(S.rain[d]){const bh=S.rain[d]/rmax*h*.4;x.fillRect(px(d)-3,T+h-bh,6,bh)}
  ST2.forEach((o,i)=>{x.strokeStyle=COL[i%8];x.lineWidth=2.2;x.setLineDash([]);x.beginPath();o.s.forEach((v,d)=>d?x.lineTo(px(d),py(v)):x.moveTo(px(0),py(v)));x.stroke();x.lineWidth=1;x.setLineDash([4,4]);x.beginPath();x.moveTo(L,py(o.Cap));x.lineTo(L+w,py(o.Cap));x.stroke();x.setLineDash([])});
  $('lg').innerHTML=ST2.map((o,i)=>`<span style="color:${COL[i%8]}">■ ${o.name}</span>`).join(' &nbsp;')+' · línea punteada = capacidad · barras azules = lluvia diaria (altura relativa)'}
-function renderProps(){const o=ST2.find(u=>u.id===SEL2),el=$('sp2');
+
+function renderProps(){
+ const o=ST2.find(u=>u.id===SEL2),el=$('sp2');
  if(!o){el.innerHTML='';return}
+ const deg=Math.round(((o.ang||0)*180/Math.PI+360)%360);
  const f=(k,lab,st)=>`<div><label>${lab}</label><input type="number" value="${o.p[k]}" step="${st}" min="0.1" onchange="updS(${o.id},'${k}',this.value)"></div>`;
- el.innerHTML=`<div style="border:1px solid var(--bd);border-radius:8px;padding:8px"><b style="color:${COL[ST2.indexOf(o)%8]}">${o.name}</b> — ${o.type==='dam'?'Presa / bordo':'Jagüey excavado'}<div class="r">`+(o.type==='dam'?f('Hw','Altura del agua (m)',.25)+f('fb','Bordo libre (m)',.1):f('l','Largo (m)',5)+f('w','Ancho (m)',5))+'</div><div class="r">'+(o.type==='dam'?f('cw','Ancho corona (m)',.5)+f('z','Talud (H:V)',.5):f('d','Profundidad (m)',.5)+f('z','Talud (H:V)',.5))+`</div><button class="s" onclick="delS(${o.id})" style="margin-top:8px">🗑️ Eliminar</button></div>`}
-function updS(id,k,v){const o=ST2.find(u=>u.id===id);if(!o||!(+v>0))return;o.p[k]=+v;calcAll();run2()}
-function delS(id){ST2=ST2.filter(o=>o.id!==id);SEL2=0;renderProps();calcAll();run2()}
-function pos2(e){const c=$('cv2'),r=c.getBoundingClientRect(),f=c.width/r.width;return[G.minX+((e.clientX-r.left)*f-G.pad)/G.s,G.minY+(G.hc-G.pad-(e.clientY-r.top)*f)/G.s]}
-$('cv2').addEventListener('click',e=>{if(!G)return;const[x,y]=pos2(e);$('m2m').textContent='';
- if(mode2==='sel'){let best=0,bd=1e9;for(const o of ST2){let d=Math.hypot(x-o.x,y-o.y);if(o.type==='dam'){const a=[G.minX+o.w1[0]*G.cs,G.minY+o.w1[1]*G.cs],b=[G.minX+o.w2[0]*G.cs,G.minY+o.w2[1]*G.cs];d=Math.min(d,segD([x,y],a,b));if(o.flood.includes(cellOf(x,y)))d=Math.min(d,1)}else d=Math.max(0,d-Math.max(o.p.l,o.p.w)/2);if(d<bd){bd=d;best=o.id}}
-  SEL2=bd<=14/G.s?best:0;renderProps();run2();return}
- let k=cellOf(x,y);if(k<0||!G.mask[k]){$('m2m').textContent='Haz clic dentro del contorno del predio.';return}
- if($('sn').checked){let bk=k,ba=G.acc[k];const i0=k%G.nx,j0=(k-i0)/G.nx;for(let a=-4;a<=4;a++)for(let b=-4;b<=4;b++){const ii=i0+a,jj=j0+b;if(ii<0||jj<0||ii>=G.nx||jj>=G.ny)continue;const q=jj*G.nx+ii;if(G.mask[q]&&G.acc[q]>ba){ba=G.acc[q];bk=q}}k=bk}
- if(ST2.some(o=>o.k===k)){$('m2m').textContent='Ya hay una estructura en ese punto.';return}
- const t=mode2,nm=t==='dam'?'P'+(++PN):'J'+(++JN);
- ST2.push({id:++NID,type:t,name:nm,x:wx(k),y:wy(k),p:t==='dam'?{Hw:2,fb:.5,cw:3,z:2.5}:{l:30,w:20,d:3,z:2}});
- SEL2=NID;renderProps();calcAll();run2()});
-$('cv2').addEventListener('mousemove',e=>{if(!G)return;const[x,y]=pos2(e),k=cellOf(x,y);if(k<0||!G.mask[k]){$('hv2').textContent='';return}
- $('hv2').innerHTML=`Elevación <b>${G.Z[k].toFixed(1)} m</b> · Área que drena aquí <b>${(G.acc[k]*G.cs*G.cs/10000).toFixed(2)} ha</b>`});
-['nd','cr','ia','evp','inf','wh','cu'].forEach(id=>$(id).addEventListener('input',()=>{if(G&&$('m2').style.display!=='none')run2()}));
+ el.innerHTML=`<div style="border:1px solid var(--bd);border-radius:8px;padding:8px">
+ <div style="display:flex;justify-content:space-between;align-items:center"><b style="color:${COL[ST2.indexOf(o)%8]}">${o.name}</b> <small>${o.type==='dam'?'Presa / Bordo':'Jagüey Excavado'}</small></div>
+ <label style="margin-top:6px">🔄 Orientación / Ángulo (${deg}°)</label>
+ <div class="r" style="align-items:center;gap:6px">
+  <input type="range" min="0" max="360" value="${deg}" style="flex:2" oninput="updAng(${o.id},this.value)">
+  <input type="number" value="${deg}" min="0" max="360" style="flex:1" onchange="updAng(${o.id},this.value)">
+  <button class="s" style="margin:0;padding:4px 8px;font-size:12px" onclick="alignStr(${o.id})">🎯 Alinear</button>
+ </div>
+ <label style="margin-top:6px">Dimensiones de la estructura:</label>
+ <div class="r">`+(o.type==='dam'?f('Hw','Altura agua (m)',.25)+f('fb','Bordo libre (m)',.1):f('l','Largo (m)',5)+f('w','Ancho (m)',5))+`</div>
+ <div class="r">`+(o.type==='dam'?f('cw','Ancho corona (m)',.5)+f('z','Talud (H:V)',.5):f('d','Profundidad (m)',.5)+f('z','Talud (H:V)',.5))+`</div>
+ <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
+  <small>💡 Arrastra la figura o el manipulador 🔄 en el plano.</small>
+  <button class="s" onclick="delS(${o.id})" style="margin:0;color:#c0392b;border-color:#c0392b">🗑️ Eliminar</button>
+ </div></div>`}
+
+function updAng(id,deg){const o=ST2.find(u=>u.id===id);if(!o)return;o.ang=(+deg*Math.PI)/180;calcAll();run2();renderProps()}
+function alignStr(id){const o=ST2.find(u=>u.id===id);if(!o||!G)return;const k=o.k,i=k%G.nx,j=Math.floor(k/G.nx);
+ const gx=G.Z[j*G.nx+Math.min(i+1,G.nx-1)]-G.Z[j*G.nx+Math.max(i-1,0)],gy=G.Z[Math.min(j+1,G.ny-1)*G.nx+i]-G.Z[Math.max(j-1,0)*G.nx+i];
+ o.ang=Math.atan2(-gx,gy);calcAll();run2();renderProps()}
+function updS(id,k,v){const o=ST2.find(u=>u.id===id);if(!o||!(+v>0))return;o.p[k]=+v;calcAll();run2();renderProps()}
+function delS(id){ST2=ST2.filter(u=>u.id!==id);if(SEL2===id)SEL2=ST2.length?ST2[0].id:0;calcAll();run2();renderProps()}
+
+const cv2=$('cv2');
+cv2.addEventListener('mousedown',e=>{if(!G)return;const r=cv2.getBoundingClientRect(),f=cv2.width/r.width;
+ const px=(e.clientX-r.left)*f,py=(e.clientY-r.top)*f,wx_v=G.minX+(px-G.pad)/G.s,wy_v=G.minY+(G.hc-G.pad-py)/G.s;
+ const so=ST2.find(o=>o.id===SEL2);
+ if(so){const cx=X2(so.x),cy=Y2(so.y),hx=cx+Math.cos(so.ang)*45,hy=cy-Math.sin(so.ang)*45;
+  if(Math.hypot(px-hx,py-hy)<=15){isRotating2=true;draggedObj2=so;return}}
+ let found=null,minD=1e9;
+ for(const o of ST2){const d=Math.hypot(px-X2(o.x),py-Y2(o.y));if(d<25&&d<minD){minD=d;found=o}}
+ if(mode2==='dam'||mode2==='pond'){
+  let px_w=wx_v,py_w=wy_v;
+  if($('sn').checked&&mode2==='dam'){let bd=1e9,bk=-1;
+   for(let k=0;k<G.Z.length;k++)if(G.mask[k]&&G.acc[k]>=G.th){const d=Math.hypot(wx(k)-wx_v,wy(k)-wy_v);if(d<bd){bd=d;bk=k}}
+   if(bk>=0&&bd<=10*G.cs){px_w=wx(bk);py_w=wy(bk)}}
+  const id=++NID,k=cellOf(px_w,py_w);let initAng=0;
+  if(k>=0){const ci=k%G.nx,cj=Math.floor(k/G.nx);
+   const gx=G.Z[cj*G.nx+Math.min(ci+1,G.nx-1)]-G.Z[cj*G.nx+Math.max(ci-1,0)],gy=G.Z[Math.min(cj+1,G.ny-1)*G.nx+ci]-G.Z[Math.max(cj-1,0)*G.nx+ci];
+   initAng=Math.atan2(-gx,gy)}
+  const newObj={id,name:(mode2==='dam'?'P'+(++PN):'J'+(++JN)),type:mode2,x:px_w,y:py_w,ang:initAng,p:mode2==='dam'?{Hw:2,fb:0.5,cw:2,z:2}:{l:30,w:20,d:2.5,z:1.5}};
+  ST2.push(newObj);SEL2=id;isDragging2=true;draggedObj2=newObj;setM2('sel');calcAll();run2();renderProps();return;
+ }
+ if(found){SEL2=found.id;isDragging2=true;draggedObj2=found;calcAll();run2();renderProps()}
+ else{SEL2=0;calcAll();run2();renderProps()}});
+
+cv2.addEventListener('mousemove',e=>{if(!G)return;const r=cv2.getBoundingClientRect(),f=cv2.width/r.width;
+ const px=(e.clientX-r.left)*f,py=(e.clientY-r.top)*f,wx_v=G.minX+(px-G.pad)/G.s,wy_v=G.minY+(G.hc-G.pad-py)/G.s;
+ if(isRotating2&&draggedObj2){const cx=X2(draggedObj2.x),cy=Y2(draggedObj2.y);
+  draggedObj2.ang=Math.atan2(-(py-cy),px-cx);calcAll();run2();renderProps();return}
+ if(isDragging2&&draggedObj2){draggedObj2.x=wx_v;draggedObj2.y=wy_v;calcAll();run2();renderProps();return}
+ const k=cellOf(wx_v,wy_v);
+ if(k>=0&&G.mask[k]){
+  let ht=`Elevación <b>${G.Z[k].toFixed(1)} m</b> · Pendiente <b>${G.slope[k].toFixed(0)}%</b> · Área aportante <b>${(G.acc[k]*G.cs*G.cs).toFixed(0)} m²</b>`;
+  const so=ST2.find(o=>o.id===SEL2);
+  if(so){const cx=X2(so.x),cy=Y2(so.y),hx=cx+Math.cos(so.ang)*45,hy=cy-Math.sin(so.ang)*45;
+   if(Math.hypot(px-hx,py-hy)<=15)ht+=' · <b>🔄 Arrastra para girar</b>';
+   else if(Math.hypot(px-cx,py-cy)<=25)ht+=' · <b>✋ Arrastra para mover</b>'}
+  $('hv2').innerHTML=ht;
+ }else $('hv2').textContent=''});
+
+cv2.addEventListener('mouseup',()=>{isDragging2=false;isRotating2=false;draggedObj2=null});
+cv2.addEventListener('mouseleave',()=>{isDragging2=false;isRotating2=false;draggedObj2=null});
 </script></body></html>
